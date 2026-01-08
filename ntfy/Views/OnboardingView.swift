@@ -68,12 +68,22 @@ struct OnboardingView: View {
             Spacer()
 
             // App Icon
-            Image("AppIcon")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 120, height: 120)
-                .clipShape(RoundedRectangle(cornerRadius: 28))
-                .shadow(color: brandBlue.opacity(0.3), radius: 20, x: 0, y: 10)
+            ZStack {
+                RoundedRectangle(cornerRadius: 28)
+                    .fill(
+                        LinearGradient(
+                            colors: [brandBackground, brandLightBlue.opacity(0.5)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 120, height: 120)
+
+                Image(systemName: "bell.badge.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(brandBlue)
+            }
+            .shadow(color: brandBlue.opacity(0.3), radius: 20, x: 0, y: 10)
 
             VStack(spacing: 8) {
                 Text("ntfy+")

@@ -246,8 +246,8 @@ struct MessagesView: View {
             username: credentials?.username,
             password: credentials?.password,
             token: token
-        ) { message in
-            // Already on MainActor (NtfyService wraps callback in MainActor.run)
+        ) { @MainActor message in
+            // Callback is guaranteed to run on MainActor
             // Check if message already exists
             let messageId = message.id
             let existingPredicate = #Predicate<StoredMessage> { $0.messageId == messageId }
@@ -275,16 +275,31 @@ struct MessagesView: View {
     private func markAsRead(_ message: StoredMessage) {
         if !message.isRead {
             message.isRead = true
+            // Remove notification and update badge
+            NotificationService.shared.removeNotification(withIdentifier: message.messageId)
+            Task {
+                await updateBadgeCount()
+            }
         }
     }
 
     private func toggleRead(_ message: StoredMessage) {
         message.isRead.toggle()
+        if message.isRead {
+            NotificationService.shared.removeNotification(withIdentifier: message.messageId)
+        }
+        Task {
+            await updateBadgeCount()
+        }
     }
 
     private func markAllAsRead() {
         for message in messages where !message.isRead {
             message.isRead = true
+            NotificationService.shared.removeNotification(withIdentifier: message.messageId)
+        }
+        Task {
+            await NotificationService.shared.clearBadge()
         }
     }
 
@@ -297,10 +312,17 @@ struct MessagesView: View {
         )
         modelContext.insert(deletedRecord)
 
+        // Remove notification
+        NotificationService.shared.removeNotification(withIdentifier: message.messageId)
+
         withAnimation {
             modelContext.delete(message)
         }
         try? modelContext.save()
+
+        Task {
+            await updateBadgeCount()
+        }
     }
 
     private func clearAllMessages() {
@@ -312,6 +334,7 @@ struct MessagesView: View {
                 serverURL: topic.serverURL
             )
             modelContext.insert(deletedRecord)
+            NotificationService.shared.removeNotification(withIdentifier: message.messageId)
         }
 
         // Delete all messages locally
@@ -321,11 +344,20 @@ struct MessagesView: View {
             }
         }
         try? modelContext.save()
+
+        Task {
+            await updateBadgeCount()
+        }
     }
 
     private func unsubscribeTopic() {
         // Unsubscribe from SSE
         ntfyService.unsubscribe(serverURL: topic.serverURL, topic: topic.name)
+
+        // Remove all notifications for this topic
+        Task {
+            await NotificationService.shared.removeNotifications(forTopic: topic.name)
+        }
 
         // Delete all messages
         for message in messages {
@@ -341,8 +373,20 @@ struct MessagesView: View {
         modelContext.delete(topic)
         try? modelContext.save()
 
+        Task {
+            await updateBadgeCount()
+        }
+
         // Dismiss the view
         dismiss()
+    }
+
+    private func updateBadgeCount() async {
+        // Count unread messages across all topics
+        let unreadPredicate = #Predicate<StoredMessage> { !$0.isRead }
+        let descriptor = FetchDescriptor(predicate: unreadPredicate)
+        let unreadCount = (try? modelContext.fetchCount(descriptor)) ?? 0
+        await NotificationService.shared.setBadgeCount(unreadCount)
     }
 }
 

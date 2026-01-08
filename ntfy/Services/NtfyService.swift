@@ -220,23 +220,25 @@ final class NtfyService {
         username: String? = nil,
         password: String? = nil,
         token: String? = nil,
-        onMessage: @escaping (NtfyMessage) -> Void
+        onMessage: @escaping @MainActor (NtfyMessage) -> Void
     ) {
         let key = "\(serverURL)/\(topic)"
 
         // Cancel existing subscription
         activeTasks[key]?.cancel()
 
-        let task = Task {
+        let task = Task.detached { [weak self] in
+            guard let self else { return }
+
             let urlString = "\(serverURL)/\(topic)/sse"
             guard let url = URL(string: urlString) else { return }
 
-            let auth = authHeader(username: username, password: password, token: token)
-            var request = createRequest(url: url, auth: auth)
+            let auth = await self.authHeader(username: username, password: password, token: token)
+            var request = await self.createRequest(url: url, auth: auth)
             request.timeoutInterval = TimeInterval.infinity
 
             do {
-                let (bytes, response) = try await session.bytes(for: request)
+                let (bytes, response) = try await self.session.bytes(for: request)
 
                 guard let httpResponse = response as? HTTPURLResponse,
                       httpResponse.statusCode == 200 else {
@@ -251,9 +253,7 @@ final class NtfyService {
                         if let data = jsonString.data(using: .utf8),
                            let message = try? JSONDecoder().decode(NtfyMessage.self, from: data),
                            message.event == "message" {
-                            await MainActor.run {
-                                onMessage(message)
-                            }
+                            await onMessage(message)
                         }
                     }
                 }
