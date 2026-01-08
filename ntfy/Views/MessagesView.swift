@@ -236,29 +236,35 @@ struct MessagesView: View {
         let token = KeychainManager.shared.loadToken(serverURL: topic.serverURL)
         let credentials = KeychainManager.shared.loadCredentials(serverURL: topic.serverURL)
 
+        // Capture needed values since self is a struct
+        let topicRef = topic
+        let context = modelContext
+
         ntfyService.subscribe(
             serverURL: topic.serverURL,
             topic: topic.name,
             username: credentials?.username,
             password: credentials?.password,
             token: token
-        ) { [self] message in
-            Task { @MainActor in
-                // Check if message already exists
-                let existingPredicate = #Predicate<StoredMessage> { $0.messageId == message.id }
-                let descriptor = FetchDescriptor(predicate: existingPredicate)
-                let existing = try? modelContext.fetch(descriptor)
+        ) { message in
+            // Already on MainActor (NtfyService wraps callback in MainActor.run)
+            // Check if message already exists
+            let messageId = message.id
+            let existingPredicate = #Predicate<StoredMessage> { $0.messageId == messageId }
+            let descriptor = FetchDescriptor(predicate: existingPredicate)
+            let existing = try? context.fetch(descriptor)
 
-                if existing?.isEmpty ?? true {
-                    let storedMessage = StoredMessage(from: message, topic: topic)
-                    modelContext.insert(storedMessage)
-                    topic.lastMessageAt = Date()
+            if existing?.isEmpty ?? true {
+                let storedMessage = StoredMessage(from: message, topic: topicRef)
+                context.insert(storedMessage)
+                topicRef.lastMessageAt = Date()
 
-                    // Show notification if app is in background
-                    if !topic.isMuted {
+                // Show notification if app is in background
+                if !topicRef.isMuted {
+                    Task {
                         await NotificationService.shared.scheduleLocalNotification(
                             for: message,
-                            topic: topic.name
+                            topic: topicRef.name
                         )
                     }
                 }
