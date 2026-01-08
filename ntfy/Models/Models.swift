@@ -145,6 +145,60 @@ final class Topic {
     }
 }
 
+// Storable action for SwiftData
+struct StoredAction: Codable, Hashable {
+    let action: String      // "view", "http", "broadcast"
+    let label: String
+    let url: String?
+    let method: String?     // GET, POST, etc.
+    let headers: [String: String]?
+    let body: String?
+    let clear: Bool?
+
+    init(from ntfyAction: NtfyAction) {
+        self.action = ntfyAction.action
+        self.label = ntfyAction.label
+        self.url = ntfyAction.url
+        self.method = ntfyAction.method
+        self.headers = ntfyAction.headers
+        self.body = ntfyAction.body
+        self.clear = ntfyAction.clear
+    }
+}
+
+// Storable attachment for SwiftData
+struct StoredAttachment: Codable, Hashable {
+    let name: String?
+    let type: String?
+    let size: Int?
+    let expires: Int?
+    let url: String?
+
+    init(from ntfyAttachment: NtfyAttachment) {
+        self.name = ntfyAttachment.name
+        self.type = ntfyAttachment.type
+        self.size = ntfyAttachment.size
+        self.expires = ntfyAttachment.expires
+        self.url = ntfyAttachment.url
+    }
+
+    var isImage: Bool {
+        guard let type = type else { return false }
+        return type.hasPrefix("image/")
+    }
+
+    var formattedSize: String? {
+        guard let size = size else { return nil }
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: Int64(size))
+    }
+
+    var fileName: String {
+        name ?? "attachment"
+    }
+}
+
 @Model
 final class StoredMessage {
     @Attribute(.unique) var id: String
@@ -158,6 +212,10 @@ final class StoredMessage {
     var iconURL: String?
     var isRead: Bool
     var receivedAt: Date
+
+    // New: Attachment and Actions
+    var attachmentData: Data?
+    var actionsData: Data?
 
     var topic: Topic?
 
@@ -174,6 +232,18 @@ final class StoredMessage {
         self.isRead = false
         self.receivedAt = Date()
         self.topic = topic
+
+        // Encode attachment
+        if let attachment = ntfyMessage.attachment {
+            let storedAttachment = StoredAttachment(from: attachment)
+            self.attachmentData = try? JSONEncoder().encode(storedAttachment)
+        }
+
+        // Encode actions
+        if let actions = ntfyMessage.actions, !actions.isEmpty {
+            let storedActions = actions.map { StoredAction(from: $0) }
+            self.actionsData = try? JSONEncoder().encode(storedActions)
+        }
     }
 
     var date: Date {
@@ -186,6 +256,18 @@ final class StoredMessage {
 
     var emojiTags: [String] {
         tags?.compactMap { EmojiMap.emoji(for: $0) } ?? []
+    }
+
+    // Decoded attachment
+    var attachment: StoredAttachment? {
+        guard let data = attachmentData else { return nil }
+        return try? JSONDecoder().decode(StoredAttachment.self, from: data)
+    }
+
+    // Decoded actions
+    var actions: [StoredAction]? {
+        guard let data = actionsData else { return nil }
+        return try? JSONDecoder().decode([StoredAction].self, from: data)
     }
 }
 

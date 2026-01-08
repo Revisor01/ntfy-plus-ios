@@ -308,6 +308,9 @@ struct AddTopicView: View {
 
                 try? modelContext.save()
 
+                // Subscribe to Firebase topic for push notifications
+                FirebaseService.shared.subscribeToTopic(serverURL: serverURL, topic: topicNameTrimmed)
+
                 await MainActor.run {
                     dismiss()
                 }

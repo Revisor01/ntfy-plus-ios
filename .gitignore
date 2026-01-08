@@ -70,3 +70,9 @@ Temporary Items
 # Environment
 .env
 .env.local
+
+# Firebase & APNs Keys (NEVER commit these!)
+GoogleService-Info.plist
+*.p8
+*firebase*.json
+*adminsdk*.json

@@ -151,6 +151,9 @@ struct TopicsView: View {
     private func deleteTopic(_ topic: Topic) {
         ntfyService.unsubscribe(serverURL: topic.serverURL, topic: topic.name)
 
+        // Unsubscribe from Firebase topic
+        FirebaseService.shared.unsubscribeFromTopic(serverURL: topic.serverURL, topic: topic.name)
+
         withAnimation {
             if selectedTopic == topic {
                 selectedTopic = nil
