@@ -1,0 +1,444 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A1000001233300001 /* ntfyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300002 /* ntfyApp.swift */; };
+		A1000001233300003 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300004 /* ContentView.swift */; };
+		A1000001233300005 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000001233300006 /* Assets.xcassets */; };
+		A1000001233300007 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300008 /* Models.swift */; };
+		A1000001233300009 /* NtfyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300010 /* NtfyService.swift */; };
+		A1000001233300011 /* TopicsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300012 /* TopicsView.swift */; };
+		A1000001233300013 /* MessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300014 /* MessagesView.swift */; };
+		A1000001233300015 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300016 /* SettingsView.swift */; };
+		A1000001233300017 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300018 /* NotificationService.swift */; };
+		A1000001233300019 /* IconManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300020 /* IconManager.swift */; };
+		A1000001233300021 /* MessageRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300022 /* MessageRow.swift */; };
+		A1000001233300023 /* TopicRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300024 /* TopicRow.swift */; };
+		A1000001233300025 /* AddTopicView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300026 /* AddTopicView.swift */; };
+		A1000001233300027 /* PublishView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300028 /* PublishView.swift */; };
+		A1000001233300029 /* KeychainManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300030 /* KeychainManager.swift */; };
+		A1000001233300031 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300032 /* Extensions.swift */; };
+		A1000001233300033 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300034 /* Theme.swift */; };
+		A1000001233300037 /* EditTopicView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300038 /* EditTopicView.swift */; };
+		A1000001233300039 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001233300040 /* OnboardingView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A1000001233300000 /* ntfy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ntfy.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1000001233300002 /* ntfyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ntfyApp.swift; sourceTree = "<group>"; };
+		A1000001233300004 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A1000001233300006 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A1000001233300008 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		A1000001233300010 /* NtfyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NtfyService.swift; sourceTree = "<group>"; };
+		A1000001233300012 /* TopicsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicsView.swift; sourceTree = "<group>"; };
+		A1000001233300014 /* MessagesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessagesView.swift; sourceTree = "<group>"; };
+		A1000001233300016 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A1000001233300018 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
+		A1000001233300020 /* IconManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IconManager.swift; sourceTree = "<group>"; };
+		A1000001233300022 /* MessageRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageRow.swift; sourceTree = "<group>"; };
+		A1000001233300024 /* TopicRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopicRow.swift; sourceTree = "<group>"; };
+		A1000001233300026 /* AddTopicView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddTopicView.swift; sourceTree = "<group>"; };
+		A1000001233300028 /* PublishView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PublishView.swift; sourceTree = "<group>"; };
+		A1000001233300030 /* KeychainManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainManager.swift; sourceTree = "<group>"; };
+		A1000001233300032 /* Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
+		A1000001233300034 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		A1000001233300035 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A1000001233300036 /* ntfy.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ntfy.entitlements; sourceTree = "<group>"; };
+		A1000001233300038 /* EditTopicView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditTopicView.swift; sourceTree = "<group>"; };
+		A1000001233300040 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A1000001233399997 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A1000001233399991 = {
+			isa = PBXGroup;
+			children = (
+				A1000001233399993 /* ntfy */,
+				A1000001233399992 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A1000001233399992 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A1000001233300000 /* ntfy.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A1000001233399993 /* ntfy */ = {
+			isa = PBXGroup;
+			children = (
+				A1000001233300002 /* ntfyApp.swift */,
+				A1000001233300004 /* ContentView.swift */,
+				A1000001233399994 /* Models */,
+				A1000001233399995 /* Views */,
+				A1000001233399996 /* Services */,
+				A1000001233300006 /* Assets.xcassets */,
+				A1000001233300035 /* Info.plist */,
+				A1000001233300036 /* ntfy.entitlements */,
+			);
+			path = ntfy;
+			sourceTree = "<group>";
+		};
+		A1000001233399994 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				A1000001233300008 /* Models.swift */,
+				A1000001233300034 /* Theme.swift */,
+				A1000001233300032 /* Extensions.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		A1000001233399995 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				A1000001233300012 /* TopicsView.swift */,
+				A1000001233300014 /* MessagesView.swift */,
+				A1000001233300016 /* SettingsView.swift */,
+				A1000001233300022 /* MessageRow.swift */,
+				A1000001233300024 /* TopicRow.swift */,
+				A1000001233300026 /* AddTopicView.swift */,
+				A1000001233300028 /* PublishView.swift */,
+				A1000001233300038 /* EditTopicView.swift */,
+				A1000001233300040 /* OnboardingView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		A1000001233399996 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				A1000001233300010 /* NtfyService.swift */,
+				A1000001233300018 /* NotificationService.swift */,
+				A1000001233300020 /* IconManager.swift */,
+				A1000001233300030 /* KeychainManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A1000001233399999 /* ntfy */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1000001233399988 /* Build configuration list for PBXNativeTarget "ntfy" */;
+			buildPhases = (
+				A1000001233399998 /* Sources */,
+				A1000001233399997 /* Frameworks */,
+				A1000001233399990 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ntfy;
+			productName = ntfy;
+			productReference = A1000001233300000 /* ntfy.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A1000001233399900 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					A1000001233399999 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = A1000001233399989 /* Build configuration list for PBXProject "ntfy-ios" */;
+			compatibilityVersion = "Xcode 15.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				de,
+			);
+			mainGroup = A1000001233399991;
+			productRefGroup = A1000001233399992 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A1000001233399999 /* ntfy */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A1000001233399990 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000001233300005 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A1000001233399998 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1000001233300001 /* ntfyApp.swift in Sources */,
+				A1000001233300003 /* ContentView.swift in Sources */,
+				A1000001233300007 /* Models.swift in Sources */,
+				A1000001233300009 /* NtfyService.swift in Sources */,
+				A1000001233300011 /* TopicsView.swift in Sources */,
+				A1000001233300013 /* MessagesView.swift in Sources */,
+				A1000001233300015 /* SettingsView.swift in Sources */,
+				A1000001233300017 /* NotificationService.swift in Sources */,
+				A1000001233300019 /* IconManager.swift in Sources */,
+				A1000001233300021 /* MessageRow.swift in Sources */,
+				A1000001233300023 /* TopicRow.swift in Sources */,
+				A1000001233300025 /* AddTopicView.swift in Sources */,
+				A1000001233300027 /* PublishView.swift in Sources */,
+				A1000001233300029 /* KeychainManager.swift in Sources */,
+				A1000001233300031 /* Extensions.swift in Sources */,
+				A1000001233300033 /* Theme.swift in Sources */,
+				A1000001233300037 /* EditTopicView.swift in Sources */,
+				A1000001233300039 /* OnboardingView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A1000001233399983 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = ntfy/ntfy.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J459G9CJT5;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ntfy/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "ntfy+";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.godsapp.ntfy;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1000001233399984 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
+				CODE_SIGN_ENTITLEMENTS = ntfy/ntfy.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J459G9CJT5;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ntfy/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "ntfy+";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.godsapp.ntfy;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A1000001233399985 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A1000001233399986 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 6.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A1000001233399988 /* Build configuration list for PBXNativeTarget "ntfy" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000001233399983 /* Debug */,
+				A1000001233399984 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1000001233399989 /* Build configuration list for PBXProject "ntfy-ios" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1000001233399985 /* Debug */,
+				A1000001233399986 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A1000001233399900 /* Project object */;
+}
