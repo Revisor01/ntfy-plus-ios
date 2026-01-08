@@ -59,6 +59,11 @@ struct MessageRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                // Attachment
+                if let attachment = message.attachment, let url = attachment.url {
+                    attachmentView(attachment: attachment, url: url)
+                }
+
                 // Click URL
                 if let clickURL = message.clickURL, clickURL.isValidURL {
                     Button {
@@ -73,6 +78,11 @@ struct MessageRow: View {
                         .foregroundStyle(AppColors.primary)
                     }
                     .buttonStyle(.plain)
+                }
+
+                // Action buttons from ntfy
+                if let actions = message.actions, !actions.isEmpty {
+                    actionButtonsView(actions: actions)
                 }
 
                 // Actions row
@@ -174,6 +184,204 @@ struct MessageRow: View {
                 .foregroundStyle(.white)
         }
     }
+
+    // MARK: - Attachment View
+
+    @ViewBuilder
+    private func attachmentView(attachment: StoredAttachment, url: String) -> some View {
+        if attachment.isImage {
+            // Image attachment - show inline
+            AsyncImage(url: URL(string: url)) { phase in
+                switch phase {
+                case .empty:
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.secondary.opacity(0.1))
+                        .frame(height: 150)
+                        .overlay {
+                            ProgressView()
+                        }
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxHeight: 250)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                        }
+                        .onTapGesture {
+                            openURL(url)
+                        }
+                case .failure:
+                    attachmentFileRow(attachment: attachment, url: url, icon: "photo", color: .blue)
+                @unknown default:
+                    EmptyView()
+                }
+            }
+        } else {
+            // Non-image attachment - show as downloadable file
+            let icon = iconForFileType(attachment.type)
+            attachmentFileRow(attachment: attachment, url: url, icon: icon.0, color: icon.1)
+        }
+    }
+
+    @ViewBuilder
+    private func attachmentFileRow(attachment: StoredAttachment, url: String, icon: String, color: Color) -> some View {
+        Button {
+            openURL(url)
+        } label: {
+            HStack(spacing: AppSpacing.sm) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(color.opacity(0.15))
+                        .frame(width: 40, height: 40)
+
+                    Image(systemName: icon)
+                        .foregroundStyle(color)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(attachment.fileName)
+                        .font(AppFonts.subheadline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    if let size = attachment.formattedSize {
+                        Text(size)
+                            .font(AppFonts.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                Image(systemName: "arrow.down.circle")
+                    .font(.title2)
+                    .foregroundStyle(AppColors.primary)
+            }
+            .padding(AppSpacing.sm)
+            .background(Color.secondary.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func iconForFileType(_ type: String?) -> (String, Color) {
+        guard let type = type else { return ("doc", .gray) }
+
+        if type.hasPrefix("image/") { return ("photo", .blue) }
+        if type.hasPrefix("video/") { return ("film", .purple) }
+        if type.hasPrefix("audio/") { return ("waveform", .orange) }
+        if type.hasPrefix("text/") { return ("doc.text", .gray) }
+        if type.contains("pdf") { return ("doc.fill", .red) }
+        if type.contains("zip") || type.contains("tar") || type.contains("gz") { return ("doc.zipper", .yellow) }
+        if type.contains("json") || type.contains("xml") { return ("curlybraces", .green) }
+
+        return ("doc", .gray)
+    }
+
+    // MARK: - Action Buttons View
+
+    @ViewBuilder
+    private func actionButtonsView(actions: [StoredAction]) -> some View {
+        HStack(spacing: AppSpacing.sm) {
+            ForEach(actions.prefix(3), id: \.label) { action in
+                actionButton(action)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func actionButton(_ action: StoredAction) -> some View {
+        Button {
+            executeAction(action)
+        } label: {
+            HStack(spacing: AppSpacing.xxs) {
+                Image(systemName: iconForAction(action))
+                Text(action.label)
+                    .lineLimit(1)
+            }
+            .font(AppFonts.caption)
+            .padding(.horizontal, AppSpacing.sm)
+            .padding(.vertical, AppSpacing.xs)
+            .background(AppColors.primary.opacity(0.1))
+            .foregroundStyle(AppColors.primary)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func iconForAction(_ action: StoredAction) -> String {
+        switch action.action {
+        case "view": return "safari"
+        case "http": return "network"
+        case "broadcast": return "antenna.radiowaves.left.and.right"
+        default: return "bolt"
+        }
+    }
+
+    private func executeAction(_ action: StoredAction) {
+        switch action.action {
+        case "view":
+            // Open URL in browser
+            if let urlString = action.url {
+                openURL(urlString)
+            }
+
+        case "http":
+            // Execute HTTP request
+            if let urlString = action.url, let url = URL(string: urlString) {
+                Task {
+                    await executeHTTPAction(action, url: url)
+                }
+            }
+
+        default:
+            // For broadcast and others, just open URL if available
+            if let urlString = action.url {
+                openURL(urlString)
+            }
+        }
+
+        // Haptic feedback
+        if AppSettings.hapticFeedback {
+            let generator = UIImpactFeedbackGenerator(style: .medium)
+            generator.impactOccurred()
+        }
+    }
+
+    private func executeHTTPAction(_ action: StoredAction, url: URL) async {
+        var request = URLRequest(url: url)
+        request.httpMethod = action.method ?? "POST"
+
+        // Add headers
+        if let headers = action.headers {
+            for (key, value) in headers {
+                request.setValue(value, forHTTPHeaderField: key)
+            }
+        }
+
+        // Add body
+        if let body = action.body {
+            request.httpBody = body.data(using: .utf8)
+        }
+
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse,
+               (200...299).contains(httpResponse.statusCode) {
+                await MainActor.run {
+                    let generator = UINotificationFeedbackGenerator()
+                    generator.notificationOccurred(.success)
+                }
+            }
+        } catch {
+            print("HTTP action failed: \(error)")
+        }
+    }
+
+    // MARK: - Helpers
 
     private func displayURL(_ urlString: String) -> String {
         guard let url = URL(string: urlString),

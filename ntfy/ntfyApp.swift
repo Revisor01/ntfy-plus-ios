@@ -3,6 +3,9 @@ import SwiftData
 
 @main
 struct ntfyApp: App {
+    // Register AppDelegate for Firebase
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     let modelContainer: ModelContainer
 
     @State private var ntfyService = NtfyService.shared
@@ -29,10 +32,7 @@ struct ntfyApp: App {
             fatalError("Could not initialize ModelContainer: \(error)")
         }
 
-        // Setup notification delegate
-        UNUserNotificationCenter.current().delegate = NotificationService.shared
-
-        // Register notification categories
+        // Register notification categories (delegate is now handled by AppDelegate)
         NotificationService.shared.registerNotificationCategories()
     }
 

@@ -354,6 +354,9 @@ struct MessagesView: View {
         // Unsubscribe from SSE
         ntfyService.unsubscribe(serverURL: topic.serverURL, topic: topic.name)
 
+        // Unsubscribe from Firebase topic
+        FirebaseService.shared.unsubscribeFromTopic(serverURL: topic.serverURL, topic: topic.name)
+
         // Remove all notifications for this topic
         Task {
             await NotificationService.shared.removeNotifications(forTopic: topic.name)
