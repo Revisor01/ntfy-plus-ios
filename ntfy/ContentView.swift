@@ -3,6 +3,7 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(NtfyService.self) private var ntfyService
     @Query(sort: \Topic.lastMessageAt, order: .reverse) private var topics: [Topic]
     @Query private var servers: [Server]
@@ -27,11 +28,31 @@ struct ContentView: View {
             requestNotificationPermission()
         }
         .task {
+            // Fetch messages on app start
+            await refreshAllTopics()
+            // Then subscribe to SSE for real-time updates
             await subscribeToAllTopics()
         }
         .onChange(of: topics.count) {
             Task {
                 await subscribeToAllTopics()
+            }
+        }
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            if newPhase == .active {
+                print("📱 App became active - refreshing messages and reconnecting SSE")
+                Task {
+                    // Clear badge when app becomes active
+                    await NotificationService.shared.clearBadge()
+
+                    // Fetch missed messages for all topics
+                    await refreshAllTopics()
+                    // Reconnect SSE streams
+                    subscribedTopicIds.removeAll()
+                    await subscribeToAllTopics()
+                }
+            } else if newPhase == .background {
+                print("📱 App entering background - SSE connections will be suspended by iOS")
             }
         }
     }
@@ -70,6 +91,57 @@ struct ContentView: View {
     private func requestNotificationPermission() {
         Task {
             _ = await NotificationService.shared.requestAuthorization()
+        }
+    }
+
+    /// Fetch missed messages for all topics (called when app becomes active)
+    private func refreshAllTopics() async {
+        let context = modelContext
+
+        for topic in topics {
+            let token = KeychainManager.shared.loadToken(serverURL: topic.serverURL)
+            let credentials = KeychainManager.shared.loadCredentials(serverURL: topic.serverURL)
+
+            do {
+                let messages = try await ntfyService.fetchMessages(
+                    serverURL: topic.serverURL,
+                    topic: topic.name,
+                    since: "10m",  // Fetch last 10 minutes to catch any missed messages
+                    username: credentials?.username,
+                    password: credentials?.password,
+                    token: token
+                )
+
+                for message in messages {
+                    // Check if message already exists
+                    let messageId = message.id
+                    let existingPredicate = #Predicate<StoredMessage> { $0.messageId == messageId }
+                    let descriptor = FetchDescriptor(predicate: existingPredicate)
+                    let existing = try? context.fetch(descriptor)
+
+                    if existing?.isEmpty ?? true {
+                        // Check if message was deleted
+                        let topicName = topic.name
+                        let serverURL = topic.serverURL
+                        let deletedPredicate = #Predicate<DeletedMessage> { deleted in
+                            deleted.messageId == messageId && deleted.topicName == topicName && deleted.serverURL == serverURL
+                        }
+                        let deletedDescriptor = FetchDescriptor(predicate: deletedPredicate)
+                        let deletedExists = (try? context.fetch(deletedDescriptor))?.isEmpty == false
+
+                        if !deletedExists {
+                            let storedMessage = StoredMessage(from: message, topic: topic)
+                            context.insert(storedMessage)
+                            topic.lastMessageAt = Date()
+                            print("📥 Fetched missed message: \(message.title ?? message.message)")
+                        }
+                    }
+                }
+
+                try? context.save()
+            } catch {
+                print("Failed to refresh topic \(topic.name): \(error)")
+            }
         }
     }
 
@@ -119,15 +191,8 @@ struct ContentView: View {
                         topicRef.lastMessageAt = Date()
                         try? context.save()
 
-                        // Show notification if not muted
-                        if !topicRef.isMuted {
-                            Task {
-                                await NotificationService.shared.scheduleLocalNotification(
-                                    for: message,
-                                    topic: topicRef.name
-                                )
-                            }
-                        }
+                        // Don't create local notification here - Push notification
+                        // already comes via Firebase/APNs. We only store the message.
                     }
                 }
             }

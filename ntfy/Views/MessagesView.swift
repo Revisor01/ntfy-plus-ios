@@ -145,7 +145,7 @@ struct MessagesView: View {
                                 systemImage: message.isRead ? AppIcons.unread : AppIcons.read
                             )
                         }
-                        .tint(.blue)
+                        .tint(AppColors.primary)
                     }
             }
 

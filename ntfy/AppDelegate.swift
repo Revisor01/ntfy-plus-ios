@@ -48,6 +48,9 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
         let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
         print("APNs Device Token: \(tokenString)")
+
+        // Notify FirebaseService that APNs token is available
+        NotificationCenter.default.post(name: .apnsTokenReceived, object: nil)
     }
 
     func application(_ application: UIApplication,
@@ -55,22 +58,19 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         print("Failed to register for remote notifications: \(error)")
     }
 
-    // MARK: - Handle Background Notifications (Silent Push)
+    // MARK: - Handle Background Notifications
 
     func application(_ application: UIApplication,
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
 
-        // This is called when a silent push (poll request) arrives from ntfy
-        print("Received remote notification: \(userInfo)")
+        print("📬 Received remote notification (background fetch)")
 
-        // Check if this is a poll request from ntfy
-        if let pollId = userInfo["poll_id"] as? String {
-            print("Poll request received with ID: \(pollId)")
-            // The app will fetch the actual message from the server
-            // This happens automatically through our SSE subscription
-        }
+        // The NotificationServiceExtension already handles the push notification
+        // and removes the subtitle. This method is called for background fetch
+        // but we don't need to create additional notifications.
 
+        // Just acknowledge receipt
         completionHandler(.newData)
     }
 
@@ -79,9 +79,11 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 // MARK: - UNUserNotificationCenterDelegate
 extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
     // Show notification when app is in foreground
+    // NotificationServiceExtension already removed the subtitle, so just show it
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             willPresent notification: UNNotification,
                                             withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        // Show the notification as-is (subtitle already removed by extension)
         completionHandler([.banner, .sound, .badge])
     }
 
