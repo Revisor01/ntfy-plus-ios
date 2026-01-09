@@ -159,6 +159,23 @@ struct SettingsView: View {
                 } header: {
                     Text("Info")
                 }
+
+                // Footer
+                Section {
+                } footer: {
+                    HStack {
+                        Spacer()
+                        HStack(spacing: 4) {
+                            Text("Gemacht mit")
+                            Image(systemName: "heart.fill")
+                                .foregroundStyle(.red)
+                            Text("in Hennstedt")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                }
             }
             .navigationTitle("Einstellungen")
             .navigationBarTitleDisplayMode(.inline)
