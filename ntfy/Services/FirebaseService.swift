@@ -1,16 +1,52 @@
 import Foundation
-import CryptoKit
 #if canImport(FirebaseMessaging)
 import FirebaseMessaging
 #endif
 
 /// Service to manage Firebase Cloud Messaging topic subscriptions
-/// ntfy uses SHA256 hash of the topic URL as the FCM topic name
+/// ntfy server sends to FCM topics using plain topic names
 @MainActor
 final class FirebaseService {
     static let shared = FirebaseService()
 
-    private init() {}
+    /// Whether APNs token has been received and FCM is ready
+    private(set) var isReady = false
+
+    /// Pending topic subscriptions waiting for APNs token
+    private var pendingSubscriptions: [(serverURL: String, topic: String)] = []
+
+    private init() {
+        // Check if APNs token was already received (in case we're initialized late)
+        #if canImport(FirebaseMessaging)
+        if Messaging.messaging().apnsToken != nil {
+            isReady = true
+            print("FirebaseService initialized - APNs token already available")
+        }
+        #endif
+
+        // Listen for APNs token received notification
+        NotificationCenter.default.addObserver(
+            forName: .apnsTokenReceived,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.handleAPNsTokenReceived()
+            }
+        }
+    }
+
+    /// Called when APNs token is received - process pending subscriptions
+    private func handleAPNsTokenReceived() {
+        print("APNs token received - processing \(pendingSubscriptions.count) pending FCM subscriptions")
+        isReady = true
+
+        // Process all pending subscriptions
+        for pending in pendingSubscriptions {
+            performSubscription(serverURL: pending.serverURL, topic: pending.topic)
+        }
+        pendingSubscriptions.removeAll()
+    }
 
     /// Subscribe to a ntfy topic via Firebase
     /// - Parameters:
@@ -18,14 +54,36 @@ final class FirebaseService {
     ///   - topic: The topic name (e.g., "mytopic")
     func subscribeToTopic(serverURL: String, topic: String) {
         #if canImport(FirebaseMessaging)
-        let fcmTopic = hashTopicURL(serverURL: serverURL, topic: topic)
+        // Check again if APNs token is now available (might have arrived since init)
+        if !isReady && Messaging.messaging().apnsToken != nil {
+            isReady = true
+            print("FirebaseService: APNs token now available")
+        }
+        #endif
+
+        if isReady {
+            performSubscription(serverURL: serverURL, topic: topic)
+        } else {
+            // Queue subscription for later when APNs token is available
+            print("APNs token not yet available - queuing FCM subscription for \(serverURL)/\(topic)")
+            pendingSubscriptions.append((serverURL: serverURL, topic: topic))
+        }
+    }
+
+    /// Actually perform the FCM subscription
+    private func performSubscription(serverURL: String, topic: String) {
+        #if canImport(FirebaseMessaging)
+        // ntfy server sends to FCM topic using the plain topic name (not hashed)
+        // So we subscribe directly to the topic name
+        let fcmTopic = topic
+
+        print("🔔 Subscribing to FCM topic: '\(fcmTopic)' (APNs token: \(Messaging.messaging().apnsToken != nil ? "✓" : "✗"))")
 
         Messaging.messaging().subscribe(toTopic: fcmTopic) { error in
             if let error = error {
-                print("Failed to subscribe to FCM topic \(fcmTopic): \(error)")
+                print("🔔 ❌ Failed to subscribe to FCM topic '\(fcmTopic)': \(error)")
             } else {
-                print("Successfully subscribed to FCM topic: \(fcmTopic)")
-                print("  (for \(serverURL)/\(topic))")
+                print("🔔 ✅ Successfully subscribed to FCM topic: '\(fcmTopic)'")
             }
         }
         #else
@@ -39,7 +97,8 @@ final class FirebaseService {
     ///   - topic: The topic name
     func unsubscribeFromTopic(serverURL: String, topic: String) {
         #if canImport(FirebaseMessaging)
-        let fcmTopic = hashTopicURL(serverURL: serverURL, topic: topic)
+        // Use plain topic name to match subscription
+        let fcmTopic = topic
 
         Messaging.messaging().unsubscribe(fromTopic: fcmTopic) { error in
             if let error = error {
@@ -51,30 +110,6 @@ final class FirebaseService {
         #else
         print("Firebase not configured - skipping FCM unsubscription for \(serverURL)/\(topic)")
         #endif
-    }
-
-    /// Generate the FCM topic name from server URL and topic
-    /// ntfy uses SHA256 hash of the full topic URL
-    /// - Parameters:
-    ///   - serverURL: The ntfy server URL
-    ///   - topic: The topic name
-    /// - Returns: SHA256 hash of the topic URL (used as FCM topic name)
-    private func hashTopicURL(serverURL: String, topic: String) -> String {
-        // Normalize the server URL (remove trailing slash)
-        var normalizedURL = serverURL
-        if normalizedURL.hasSuffix("/") {
-            normalizedURL = String(normalizedURL.dropLast())
-        }
-
-        // Create the full topic URL
-        let topicURL = "\(normalizedURL)/\(topic)"
-
-        // Calculate SHA256 hash
-        let data = Data(topicURL.utf8)
-        let hash = SHA256.hash(data: data)
-
-        // Convert to hex string
-        return hash.compactMap { String(format: "%02x", $0) }.joined()
     }
 
     /// Get the current FCM token

@@ -41,10 +41,10 @@ final class NotificationService: NSObject {
     func scheduleLocalNotification(for message: NtfyMessage, topic: String) async {
         let content = UNMutableNotificationContent()
 
-        // Title
+        // Title - don't show topic as subtitle
         if let title = message.title {
             content.title = title
-            content.subtitle = topic
+            // No subtitle - we don't want to show the topic
         } else {
             content.title = topic
         }
@@ -123,6 +123,12 @@ final class NotificationService: NSObject {
     }
 
     func clearBadge() async {
+        // Reset shared badge counter (used by NotificationServiceExtension)
+        if let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.de.godsapp.ntfy")?
+            .appendingPathComponent("badge_count.txt") {
+            try? "0".write(to: url, atomically: true, encoding: .utf8)
+        }
+
         await setBadgeCount(0)
     }
 
@@ -259,4 +265,5 @@ extension NotificationService: UNUserNotificationCenterDelegate {
 extension Notification.Name {
     static let navigateToTopic = Notification.Name("navigateToTopic")
     static let messageReceived = Notification.Name("messageReceived")
+    static let apnsTokenReceived = Notification.Name("apnsTokenReceived")
 }

@@ -451,7 +451,7 @@ struct AppSettings {
     }
 
     static var accentColorHex: String {
-        get { defaults.string(forKey: "accentColorHex") ?? "#007AFF" }
+        get { defaults.string(forKey: "accentColorHex") ?? "#4574AD" }
         set { defaults.set(newValue, forKey: "accentColorHex") }
     }
 }

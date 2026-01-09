@@ -49,6 +49,13 @@ struct TopicsView: View {
                         }
                         .swipeActions(edge: .leading) {
                             Button {
+                                markTopicAsRead(topic)
+                            } label: {
+                                Label("Gelesen", systemImage: "checkmark.circle.fill")
+                            }
+                            .tint(AppColors.primary)
+
+                            Button {
                                 topicToEdit = topic
                             } label: {
                                 Label("Anpassen", systemImage: "paintbrush.fill")
@@ -66,6 +73,12 @@ struct TopicsView: View {
                             .tint(topic.isMuted ? .green : .orange)
                         }
                         .contextMenu {
+                            Button {
+                                markTopicAsRead(topic)
+                            } label: {
+                                Label("Als gelesen markieren", systemImage: "checkmark.circle.fill")
+                            }
+
                             Button {
                                 topicToEdit = topic
                             } label: {
@@ -100,20 +113,30 @@ struct TopicsView: View {
         .navigationTitle("ntfy+")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button {
-                        showingAddTopic = true
-                    } label: {
-                        Label("Topic abonnieren", systemImage: AppIcons.add)
+                HStack(spacing: AppSpacing.sm) {
+                    if totalUnreadCount > 0 {
+                        Button {
+                            markAllAsRead()
+                        } label: {
+                            Image(systemName: "checkmark.circle")
+                        }
                     }
 
-                    Button {
-                        showingPublish = true
+                    Menu {
+                        Button {
+                            showingAddTopic = true
+                        } label: {
+                            Label("Topic abonnieren", systemImage: AppIcons.add)
+                        }
+
+                        Button {
+                            showingPublish = true
+                        } label: {
+                            Label("Nachricht senden", systemImage: AppIcons.send)
+                        }
                     } label: {
-                        Label("Nachricht senden", systemImage: AppIcons.send)
+                        Image(systemName: AppIcons.add)
                     }
-                } label: {
-                    Image(systemName: AppIcons.add)
                 }
             }
 
@@ -168,8 +191,34 @@ struct TopicsView: View {
         }
     }
 
+    private func markTopicAsRead(_ topic: Topic) {
+        if let messages = topic.messages {
+            for message in messages where !message.isRead {
+                message.isRead = true
+            }
+            try? modelContext.save()
+        }
+    }
+
+    private func markAllAsRead() {
+        for topic in topics {
+            if let messages = topic.messages {
+                for message in messages where !message.isRead {
+                    message.isRead = true
+                }
+            }
+        }
+        try? modelContext.save()
+
+        // Clear notification badge
+        Task {
+            await NotificationService.shared.clearBadge()
+        }
+    }
+
     private func refreshAllTopics() async {
         isRefreshing = true
+        defer { isRefreshing = false }
 
         for topic in topics {
             let token = KeychainManager.shared.loadToken(serverURL: topic.serverURL)
@@ -221,7 +270,6 @@ struct TopicsView: View {
         }
 
         try? modelContext.save()
-        isRefreshing = false
     }
 }
 

@@ -50,13 +50,14 @@ struct MessageRow: View {
                     }
                 }
 
-                // Message body
+                // Message body with Markdown support
                 if let messageText = message.message, !messageText.isEmpty {
-                    Text(messageText)
+                    Text(parseMarkdown(messageText))
                         .font(AppFonts.body)
                         .foregroundStyle(.primary)
                         .lineLimit(nil)
                         .fixedSize(horizontal: false, vertical: true)
+                        .tint(AppColors.primary)
                 }
 
                 // Attachment
@@ -214,7 +215,7 @@ struct MessageRow: View {
                             openURL(url)
                         }
                 case .failure:
-                    attachmentFileRow(attachment: attachment, url: url, icon: "photo", color: .blue)
+                    attachmentFileRow(attachment: attachment, url: url, icon: "photo", color: AppColors.primary)
                 @unknown default:
                     EmptyView()
                 }
@@ -270,7 +271,7 @@ struct MessageRow: View {
     private func iconForFileType(_ type: String?) -> (String, Color) {
         guard let type = type else { return ("doc", .gray) }
 
-        if type.hasPrefix("image/") { return ("photo", .blue) }
+        if type.hasPrefix("image/") { return ("photo", AppColors.primary) }
         if type.hasPrefix("video/") { return ("film", .purple) }
         if type.hasPrefix("audio/") { return ("waveform", .orange) }
         if type.hasPrefix("text/") { return ("doc.text", .gray) }
@@ -382,6 +383,14 @@ struct MessageRow: View {
     }
 
     // MARK: - Helpers
+
+    private func parseMarkdown(_ text: String) -> AttributedString {
+        do {
+            return try AttributedString(markdown: text, options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace))
+        } catch {
+            return AttributedString(text)
+        }
+    }
 
     private func displayURL(_ urlString: String) -> String {
         guard let url = URL(string: urlString),
