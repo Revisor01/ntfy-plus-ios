@@ -147,9 +147,9 @@ struct TopicRow: View {
 
     let topic = Topic(
         name: "test-topic",
-        serverURL: "https://push.godsapp.de",
+        serverURL: "https://ntfy.sh",
         iconName: "bell.fill",
-        colorHex: "#007AFF"
+        colorHex: "#4574AD"
     )
     container.mainContext.insert(topic)
 

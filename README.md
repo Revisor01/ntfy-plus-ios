@@ -9,6 +9,14 @@
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/Platform-iOS%2017+-blue?logo=apple" alt="Platform">
+  <img src="https://img.shields.io/badge/Swift-5.9-orange?logo=swift" alt="Swift">
+  <img src="https://img.shields.io/badge/Xcode-15+-blue?logo=xcode" alt="Xcode">
+  <img src="https://img.shields.io/github/license/Revisor01/ntfy-plus-ios" alt="License">
+  <img src="https://img.shields.io/github/v/release/Revisor01/ntfy-plus-ios" alt="Version">
+</p>
+
+<p align="center">
   <a href="#features">Features</a> •
   <a href="#installation">Installation</a> •
   <a href="#konfiguration">Konfiguration</a> •
@@ -79,7 +87,6 @@ Dieses Projekt steht unter der Apache License 2.0 - siehe [LICENSE](LICENSE) fü
 ## Danksagung
 
 - [ntfy](https://ntfy.sh) von Philipp C. Heckel - Der großartige Open-Source Push-Service
-- Gebaut mit Hilfe von [Claude Code](https://claude.ai/claude-code)
 
 ## Hinweis
 
@@ -91,14 +98,7 @@ Dies ist eine inoffizielle Companion-App. ntfy+ ist nicht mit dem ntfy-Projekt v
 
 ### Verantwortlicher
 
-Simon Luthe
-Süderstraße 18
-25779 Hennstedt
-Deutschland
-
-E-Mail: mail@simonluthe.de
-Telefon: +49 151 21563194
-Web: [simonluthe.de](https://simonluthe.de)
+Siehe [Impressum](https://github.com/Revisor01/ntfy-plus-ios/issues) oder kontaktiere den Entwickler über GitHub.
 
 ### Datenverarbeitung
 

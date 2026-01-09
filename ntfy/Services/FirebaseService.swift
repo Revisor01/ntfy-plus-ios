@@ -50,7 +50,7 @@ final class FirebaseService {
 
     /// Subscribe to a ntfy topic via Firebase
     /// - Parameters:
-    ///   - serverURL: The ntfy server URL (e.g., "https://push.godsapp.de")
+    ///   - serverURL: The ntfy server URL (e.g., "https://ntfy.sh")
     ///   - topic: The topic name (e.g., "mytopic")
     func subscribeToTopic(serverURL: String, topic: String) {
         #if canImport(FirebaseMessaging)
