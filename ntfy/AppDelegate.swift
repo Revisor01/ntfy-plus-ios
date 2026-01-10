@@ -77,7 +77,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 }
 
 // MARK: - UNUserNotificationCenterDelegate
-extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
+extension AppDelegate: UNUserNotificationCenterDelegate {
     // Show notification when app is in foreground
     // NotificationServiceExtension already removed the subtitle, so just show it
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
@@ -109,7 +109,7 @@ extension AppDelegate: @preconcurrency UNUserNotificationCenterDelegate {
 }
 
 #if canImport(FirebaseMessaging)
-extension AppDelegate: @preconcurrency MessagingDelegate {
+extension AppDelegate: MessagingDelegate {
     nonisolated func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let fcmToken = fcmToken else { return }
         print("Firebase FCM Token: \(fcmToken)")

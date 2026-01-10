@@ -106,7 +106,7 @@ struct ContentView: View {
                 let messages = try await ntfyService.fetchMessages(
                     serverURL: topic.serverURL,
                     topic: topic.name,
-                    since: "10m",  // Fetch last 10 minutes to catch any missed messages
+                    since: "7d",  // Fetch last 7 days to catch any missed messages
                     username: credentials?.username,
                     password: credentials?.password,
                     token: token
@@ -133,7 +133,7 @@ struct ContentView: View {
                             let storedMessage = StoredMessage(from: message, topic: topic)
                             context.insert(storedMessage)
                             topic.lastMessageAt = Date()
-                            print("📥 Fetched missed message: \(message.title ?? message.message)")
+                            print("📥 Fetched missed message: \(message.title ?? message.message ?? "No content")")
                         }
                     }
                 }
