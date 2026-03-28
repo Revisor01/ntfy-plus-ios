@@ -115,7 +115,7 @@ extension AppDelegate: MessagingDelegate {
         print("Firebase FCM Token: \(fcmToken)")
 
         // Store token for later use
-        UserDefaults.standard.set(fcmToken, forKey: "fcmToken")
+        try? KeychainManager.shared.saveFCMToken(fcmToken)
 
         // Post notification so other parts of the app can use the token
         Task { @MainActor in

@@ -109,6 +109,16 @@ final class KeychainManager: Sendable {
         try delete(key: "\(serverURL)-token")
     }
 
+    // MARK: - FCM Token
+
+    func saveFCMToken(_ token: String) throws {
+        try save(key: "fcmToken", value: token)
+    }
+
+    func loadFCMToken() -> String? {
+        try? load(key: "fcmToken")
+    }
+
     // MARK: - Clear All
 
     func clearAll() throws {
