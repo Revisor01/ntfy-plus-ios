@@ -13,19 +13,14 @@ struct ntfyApp: App {
 
     init() {
         do {
-            let schema = Schema([
-                Topic.self,
-                StoredMessage.self,
-                Server.self,
-                DeletedMessage.self
-            ])
             let modelConfiguration = ModelConfiguration(
-                schema: schema,
+                schema: NtfySchemaV1.schema,
                 isStoredInMemoryOnly: false,
                 cloudKitDatabase: .none
             )
             modelContainer = try ModelContainer(
-                for: schema,
+                for: NtfySchemaV1.schema,
+                migrationPlan: NtfyMigrationPlan.self,
                 configurations: [modelConfiguration]
             )
         } catch {
