@@ -1,9 +1,9 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Environment(\.scenePhase) private var scenePhase
     @Environment(NtfyService.self) private var ntfyService
     @Query(sort: \Topic.lastMessageAt, order: .reverse) private var topics: [Topic]
     @Query private var servers: [Server]
@@ -14,6 +14,7 @@ struct ContentView: View {
     @State private var showingPublish = false
     @State private var navigationPath = NavigationPath()
     @State private var subscribedTopicIds: Set<String> = []
+    @State private var hasInitialized = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
@@ -26,33 +27,28 @@ struct ContentView: View {
         }
         .onAppear {
             requestNotificationPermission()
-        }
-        .task {
-            // Fetch messages on app start
-            await refreshAllTopics()
-            // Then subscribe to SSE for real-time updates
-            await subscribeToAllTopics()
+            if !hasInitialized {
+                hasInitialized = true
+                Task {
+                    print("📱 Initial load - fetching messages")
+                    await refreshAllTopics()
+                    await subscribeToAllTopics()
+                }
+            }
         }
         .onChange(of: topics.count) {
             Task {
                 await subscribeToAllTopics()
             }
         }
-        .onChange(of: scenePhase) { oldPhase, newPhase in
-            if newPhase == .active {
-                print("📱 App became active - refreshing messages and reconnecting SSE")
-                Task {
-                    // Clear badge when app becomes active
-                    await NotificationService.shared.clearBadge()
-
-                    // Fetch missed messages for all topics
-                    await refreshAllTopics()
-                    // Reconnect SSE streams
-                    subscribedTopicIds.removeAll()
-                    await subscribeToAllTopics()
-                }
-            } else if newPhase == .background {
-                print("📱 App entering background - SSE connections will be suspended by iOS")
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            guard hasInitialized else { return }
+            print("📱 didBecomeActiveNotification - refreshing messages")
+            Task {
+                await NotificationService.shared.clearBadge()
+                await refreshAllTopics()
+                subscribedTopicIds.removeAll()
+                await subscribeToAllTopics()
             }
         }
     }
@@ -95,54 +91,9 @@ struct ContentView: View {
     }
 
     /// Fetch missed messages for all topics (called when app becomes active)
+    @MainActor
     private func refreshAllTopics() async {
-        let context = modelContext
-
-        for topic in topics {
-            let token = KeychainManager.shared.loadToken(serverURL: topic.serverURL)
-            let credentials = KeychainManager.shared.loadCredentials(serverURL: topic.serverURL)
-
-            do {
-                let messages = try await ntfyService.fetchMessages(
-                    serverURL: topic.serverURL,
-                    topic: topic.name,
-                    since: "7d",  // Fetch last 7 days to catch any missed messages
-                    username: credentials?.username,
-                    password: credentials?.password,
-                    token: token
-                )
-
-                for message in messages {
-                    // Check if message already exists
-                    let messageId = message.id
-                    let existingPredicate = #Predicate<StoredMessage> { $0.messageId == messageId }
-                    let descriptor = FetchDescriptor(predicate: existingPredicate)
-                    let existing = try? context.fetch(descriptor)
-
-                    if existing?.isEmpty ?? true {
-                        // Check if message was deleted
-                        let topicName = topic.name
-                        let serverURL = topic.serverURL
-                        let deletedPredicate = #Predicate<DeletedMessage> { deleted in
-                            deleted.messageId == messageId && deleted.topicName == topicName && deleted.serverURL == serverURL
-                        }
-                        let deletedDescriptor = FetchDescriptor(predicate: deletedPredicate)
-                        let deletedExists = (try? context.fetch(deletedDescriptor))?.isEmpty == false
-
-                        if !deletedExists {
-                            let storedMessage = StoredMessage(from: message, topic: topic)
-                            context.insert(storedMessage)
-                            topic.lastMessageAt = Date()
-                            print("📥 Fetched missed message: \(message.title ?? message.message ?? "No content")")
-                        }
-                    }
-                }
-
-                try? context.save()
-            } catch {
-                print("Failed to refresh topic \(topic.name): \(error)")
-            }
-        }
+        await ntfyService.refreshTopics(topics, context: modelContext, since: "168h")
     }
 
     private func subscribeToAllTopics() async {
@@ -167,35 +118,36 @@ struct ContentView: View {
                 topic: topic.name,
                 username: credentials?.username,
                 password: credentials?.password,
-                token: token
-            ) { @MainActor message in
-                // Check if message already exists
-                let messageId = message.id
-                let existingPredicate = #Predicate<StoredMessage> { $0.messageId == messageId }
-                let descriptor = FetchDescriptor(predicate: existingPredicate)
-                let existing = try? context.fetch(descriptor)
-
-                if existing?.isEmpty ?? true {
-                    // Check if message was deleted
-                    let topicName = topicRef.name
-                    let serverURL = topicRef.serverURL
-                    let deletedPredicate = #Predicate<DeletedMessage> { deleted in
-                        deleted.messageId == messageId && deleted.topicName == topicName && deleted.serverURL == serverURL
-                    }
-                    let deletedDescriptor = FetchDescriptor(predicate: deletedPredicate)
-                    let deletedExists = (try? context.fetch(deletedDescriptor))?.isEmpty == false
-
-                    if !deletedExists {
-                        let storedMessage = StoredMessage(from: message, topic: topicRef)
-                        context.insert(storedMessage)
-                        topicRef.lastMessageAt = Date()
+                token: token,
+                onMessage: { @MainActor message in
+                    ntfyService.storeMessages(for: topicRef, messages: [message], context: context)
+                },
+                onDelete: { @MainActor deletedMessageId in
+                    // Find and delete the message locally when server sends delete event
+                    let predicate = #Predicate<StoredMessage> { $0.messageId == deletedMessageId }
+                    let descriptor = FetchDescriptor(predicate: predicate)
+                    if let messages = try? context.fetch(descriptor) {
+                        for message in messages {
+                            NotificationService.shared.removeNotification(withIdentifier: message.messageId)
+                            context.delete(message)
+                        }
                         try? context.save()
-
-                        // Don't create local notification here - Push notification
-                        // already comes via Firebase/APNs. We only store the message.
+                    }
+                },
+                onClear: { @MainActor in
+                    // Clear all messages for this topic when server sends clear event
+                    let topicId = topicRef.id
+                    let predicate = #Predicate<StoredMessage> { $0.topic?.id == topicId }
+                    let descriptor = FetchDescriptor(predicate: predicate)
+                    if let messages = try? context.fetch(descriptor) {
+                        for message in messages {
+                            NotificationService.shared.removeNotification(withIdentifier: message.messageId)
+                            context.delete(message)
+                        }
+                        try? context.save()
                     }
                 }
-            }
+            )
         }
     }
 }
