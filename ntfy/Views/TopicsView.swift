@@ -219,57 +219,7 @@ struct TopicsView: View {
     private func refreshAllTopics() async {
         isRefreshing = true
         defer { isRefreshing = false }
-
-        for topic in topics {
-            let token = KeychainManager.shared.loadToken(serverURL: topic.serverURL)
-            let credentials = KeychainManager.shared.loadCredentials(serverURL: topic.serverURL)
-
-            do {
-                let messages = try await ntfyService.fetchMessages(
-                    serverURL: topic.serverURL,
-                    topic: topic.name,
-                    since: "24h",
-                    username: credentials?.username,
-                    password: credentials?.password,
-                    token: token
-                )
-
-                // Fetch deleted message IDs for this topic
-                let topicName = topic.name
-                let serverURL = topic.serverURL
-                let deletedPredicate = #Predicate<DeletedMessage> { deleted in
-                    deleted.topicName == topicName && deleted.serverURL == serverURL
-                }
-                let deletedDescriptor = FetchDescriptor(predicate: deletedPredicate)
-                let deletedRecords = (try? modelContext.fetch(deletedDescriptor)) ?? []
-                let deletedIds = Set(deletedRecords.map { $0.messageId })
-
-                // Store new messages (skip deleted ones)
-                for message in messages {
-                    // Skip if message was deleted by user
-                    if deletedIds.contains(message.id) {
-                        continue
-                    }
-
-                    let existingPredicate = #Predicate<StoredMessage> { $0.messageId == message.id }
-                    let descriptor = FetchDescriptor(predicate: existingPredicate)
-                    let existing = try? modelContext.fetch(descriptor)
-
-                    if existing?.isEmpty ?? true {
-                        let storedMessage = StoredMessage(from: message, topic: topic)
-                        modelContext.insert(storedMessage)
-                    }
-                }
-
-                if let latestMessage = messages.first {
-                    topic.lastMessageAt = Date(timeIntervalSince1970: TimeInterval(latestMessage.time))
-                }
-            } catch {
-                print("Failed to refresh topic \(topic.name): \(error)")
-            }
-        }
-
-        try? modelContext.save()
+        await ntfyService.refreshTopics(topics, context: modelContext, since: "24h")
     }
 }
 

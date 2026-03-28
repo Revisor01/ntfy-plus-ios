@@ -10,7 +10,6 @@ struct MessagesView: View {
     @Query private var messages: [StoredMessage]
     @Query private var deletedMessages: [DeletedMessage]
 
-    @State private var isLoading = false
     @State private var error: NtfyError?
     @State private var showingError = false
     @State private var showingPublish = false
@@ -44,7 +43,7 @@ struct MessagesView: View {
 
     var body: some View {
         Group {
-            if messages.isEmpty && !isLoading {
+            if messages.isEmpty {
                 ContentUnavailableView {
                     Label("Keine Nachrichten", systemImage: AppIcons.empty)
                 } description: {
@@ -90,7 +89,7 @@ struct MessagesView: View {
             }
         }
         .refreshable {
-            await loadMessages()
+            await ntfyService.refreshTopics([topic], context: modelContext, since: "24h")
         }
         .sheet(isPresented: $showingPublish) {
             PublishView(selectedTopic: topic)
@@ -117,8 +116,7 @@ struct MessagesView: View {
             Text("Das Topic \"\(topic.name)\" wird entfernt. Alle lokalen Nachrichten werden gelöscht.")
         }
         .task {
-            await loadMessages()
-            startSubscription()
+            await ntfyService.refreshTopics([topic], context: modelContext, since: "168h")
         }
     }
 
@@ -149,127 +147,8 @@ struct MessagesView: View {
                     }
             }
 
-            if isLoading {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                }
-                .listRowBackground(Color.clear)
-            }
         }
         .listStyle(.plain)
-    }
-
-    private func loadMessages() async {
-        isLoading = true
-
-        let token = KeychainManager.shared.loadToken(serverURL: topic.serverURL)
-        let credentials = KeychainManager.shared.loadCredentials(serverURL: topic.serverURL)
-
-        do {
-            let fetchedMessages = try await ntfyService.fetchMessages(
-                serverURL: topic.serverURL,
-                topic: topic.name,
-                since: "7d",
-                username: credentials?.username,
-                password: credentials?.password,
-                token: token
-            )
-
-            // Fetch deleted message IDs fresh from database
-            let topicName = topic.name
-            let serverURL = topic.serverURL
-            let deletedPredicate = #Predicate<DeletedMessage> { deleted in
-                deleted.topicName == topicName && deleted.serverURL == serverURL
-            }
-            let deletedDescriptor = FetchDescriptor(predicate: deletedPredicate)
-            let deletedRecords = (try? modelContext.fetch(deletedDescriptor)) ?? []
-            let deletedIds = Set(deletedRecords.map { $0.messageId })
-
-            for ntfyMessage in fetchedMessages {
-                // Skip if message was deleted by user
-                if deletedIds.contains(ntfyMessage.id) {
-                    continue
-                }
-
-                // Check if message already exists
-                let messageId = ntfyMessage.id
-                let existingPredicate = #Predicate<StoredMessage> { $0.messageId == messageId }
-                let descriptor = FetchDescriptor(predicate: existingPredicate)
-                let existing = try? modelContext.fetch(descriptor)
-
-                if existing?.isEmpty ?? true {
-                    let storedMessage = StoredMessage(from: ntfyMessage, topic: topic)
-                    modelContext.insert(storedMessage)
-                }
-            }
-
-            if let latestMessage = fetchedMessages.first {
-                topic.lastMessageAt = Date(timeIntervalSince1970: TimeInterval(latestMessage.time))
-            }
-
-            try? modelContext.save()
-        } catch let ntfyError as NtfyError {
-            // Ignore cancelled errors (happens when view disappears)
-            if case .networkError(let underlying) = ntfyError,
-               (underlying as NSError).code == NSURLErrorCancelled {
-                // Silently ignore
-            } else {
-                error = ntfyError
-                showingError = true
-            }
-        } catch {
-            // Ignore cancelled errors
-            if (error as NSError).code == NSURLErrorCancelled {
-                // Silently ignore
-            } else {
-                self.error = .networkError(error)
-                showingError = true
-            }
-        }
-
-        isLoading = false
-    }
-
-    private func startSubscription() {
-        let token = KeychainManager.shared.loadToken(serverURL: topic.serverURL)
-        let credentials = KeychainManager.shared.loadCredentials(serverURL: topic.serverURL)
-
-        // Capture needed values since self is a struct
-        let topicRef = topic
-        let context = modelContext
-
-        ntfyService.subscribe(
-            serverURL: topic.serverURL,
-            topic: topic.name,
-            username: credentials?.username,
-            password: credentials?.password,
-            token: token
-        ) { @MainActor message in
-            // Callback is guaranteed to run on MainActor
-            // Check if message already exists
-            let messageId = message.id
-            let existingPredicate = #Predicate<StoredMessage> { $0.messageId == messageId }
-            let descriptor = FetchDescriptor(predicate: existingPredicate)
-            let existing = try? context.fetch(descriptor)
-
-            if existing?.isEmpty ?? true {
-                let storedMessage = StoredMessage(from: message, topic: topicRef)
-                context.insert(storedMessage)
-                topicRef.lastMessageAt = Date()
-
-                // Show notification if app is in background
-                if !topicRef.isMuted {
-                    Task {
-                        await NotificationService.shared.scheduleLocalNotification(
-                            for: message,
-                            topic: topicRef.name
-                        )
-                    }
-                }
-            }
-        }
     }
 
     private func markAsRead(_ message: StoredMessage) {
@@ -314,6 +193,23 @@ struct MessagesView: View {
 
         // Remove notification
         NotificationService.shared.removeNotification(withIdentifier: message.messageId)
+
+        // Try to delete on server if sequenceId is available (ntfy v2.16+)
+        if let sequenceId = message.sequenceId {
+            let token = KeychainManager.shared.loadToken(serverURL: topic.serverURL)
+            let credentials = KeychainManager.shared.loadCredentials(serverURL: topic.serverURL)
+
+            Task {
+                try? await ntfyService.deleteMessage(
+                    serverURL: topic.serverURL,
+                    topic: topic.name,
+                    sequenceId: sequenceId,
+                    username: credentials?.username,
+                    password: credentials?.password,
+                    token: token
+                )
+            }
+        }
 
         withAnimation {
             modelContext.delete(message)
