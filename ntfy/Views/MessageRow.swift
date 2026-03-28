@@ -7,6 +7,7 @@ struct MessageRow: View {
     @State private var showingActions = false
     @State private var pendingHTTPAction: StoredAction? = nil
     @State private var showingHTTPConfirmation = false
+    @State private var showCopiedToast = false
 
     var body: some View {
         HStack(alignment: .top, spacing: AppSpacing.sm) {
@@ -120,6 +121,22 @@ struct MessageRow: View {
         }
         .padding(.vertical, AppSpacing.xs)
         .contentShape(Rectangle())
+        .overlay(alignment: .top) {
+            if showCopiedToast {
+                Text("Kopiert!")
+                    .font(AppFonts.caption)
+                    .padding(.horizontal, AppSpacing.sm)
+                    .padding(.vertical, AppSpacing.xxs)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Capsule())
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            withAnimation { showCopiedToast = false }
+                        }
+                    }
+            }
+        }
         .contextMenu {
             Button {
                 copyMessage()
@@ -342,6 +359,7 @@ struct MessageRow: View {
         case "view": return "safari"
         case "http": return "network"
         case "broadcast": return "antenna.radiowaves.left.and.right"
+        case "copy": return "doc.on.doc"
         default: return "bolt"
         }
     }
@@ -360,6 +378,16 @@ struct MessageRow: View {
                 showingHTTPConfirmation = true
                 return   // Haptic-Feedback NICHT auslösen — erst nach Bestätigung
             }
+
+        case "copy":
+            let copyValue = action.value ?? action.label
+            UIPasteboard.general.string = copyValue
+            if AppSettings.hapticFeedback {
+                let generator = UINotificationFeedbackGenerator()
+                generator.notificationOccurred(.success)
+            }
+            withAnimation { showCopiedToast = true }
+            return  // Kein weiteres Haptic-Feedback am Ende
 
         default:
             // For broadcast and others, just open URL if available
