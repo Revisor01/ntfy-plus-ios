@@ -153,6 +153,9 @@ struct TopicsView: View {
                 unreadBadge
             }
         }
+        .overlay(alignment: .top) {
+            connectionStatusBanner
+        }
         .sheet(item: $topicToEdit) { topic in
             EditTopicView(topic: topic)
         }
@@ -169,6 +172,37 @@ struct TopicsView: View {
         .background(.ultraThinMaterial)
         .clipShape(Capsule())
         .padding(.bottom, AppSpacing.sm)
+    }
+
+    private var connectionStatusBanner: some View {
+        Group {
+            switch ntfyService.connectionStatus {
+            case .connected:
+                EmptyView()
+            case .connecting:
+                connectionBadge(text: "Verbinde...", icon: "antenna.radiowaves.left.and.right", color: .orange)
+            case .disconnected:
+                connectionBadge(text: "Nicht verbunden", icon: "wifi.slash", color: .red)
+            case .reconnecting(let attempt):
+                connectionBadge(text: "Reconnect (\(attempt)s)...", icon: "arrow.clockwise", color: .orange)
+            }
+        }
+        .animation(.easeInOut, value: ntfyService.connectionStatus)
+    }
+
+    private func connectionBadge(text: String, icon: String, color: Color) -> some View {
+        HStack(spacing: AppSpacing.xxs) {
+            Image(systemName: icon)
+                .font(.caption2)
+            Text(text)
+        }
+        .font(AppFonts.caption)
+        .foregroundStyle(color)
+        .padding(.horizontal, AppSpacing.sm)
+        .padding(.vertical, AppSpacing.xxs)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+        .padding(.top, AppSpacing.xs)
     }
 
     private func deleteTopic(_ topic: Topic) {

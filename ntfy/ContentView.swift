@@ -47,8 +47,6 @@ struct ContentView: View {
             Task {
                 await NotificationService.shared.clearBadge()
                 await refreshAllTopics()
-                subscribedTopicIds.removeAll()
-                await subscribeToAllTopics()
             }
         }
     }
