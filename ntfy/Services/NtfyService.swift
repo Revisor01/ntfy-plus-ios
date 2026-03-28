@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftData
 
 enum NtfyError: LocalizedError {
     case invalidURL
@@ -220,46 +221,73 @@ final class NtfyService {
         username: String? = nil,
         password: String? = nil,
         token: String? = nil,
-        onMessage: @escaping @MainActor (NtfyMessage) -> Void
+        onMessage: @escaping @MainActor (NtfyMessage) -> Void,
+        onDelete: (@MainActor (String) -> Void)? = nil,
+        onClear: (@MainActor () -> Void)? = nil
     ) {
         let key = "\(serverURL)/\(topic)"
 
         // Cancel existing subscription
         activeTasks[key]?.cancel()
 
+        print("🔌 SSE: Subscribing to \(topic)")
+
         let task = Task.detached { [weak self] in
             guard let self else { return }
 
             let urlString = "\(serverURL)/\(topic)/sse"
-            guard let url = URL(string: urlString) else { return }
+            guard let url = URL(string: urlString) else {
+                print("🔌 SSE: Invalid URL for \(topic)")
+                return
+            }
 
             let auth = await self.authHeader(username: username, password: password, token: token)
             var request = await self.createRequest(url: url, auth: auth)
             request.timeoutInterval = TimeInterval.infinity
 
             do {
+                print("🔌 SSE: Connecting to \(topic)...")
                 let (bytes, response) = try await self.session.bytes(for: request)
 
                 guard let httpResponse = response as? HTTPURLResponse,
                       httpResponse.statusCode == 200 else {
+                    let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                    print("🔌 SSE: Bad response \(code) for \(topic)")
                     return
                 }
 
+                print("🔌 SSE: Connected to \(topic)")
+
                 for try await line in bytes.lines {
-                    if Task.isCancelled { break }
+                    if Task.isCancelled {
+                        print("🔌 SSE: Cancelled for \(topic)")
+                        break
+                    }
 
                     if line.hasPrefix("data: ") {
                         let jsonString = String(line.dropFirst(6))
                         if let data = jsonString.data(using: .utf8),
-                           let message = try? JSONDecoder().decode(NtfyMessage.self, from: data),
-                           message.event == "message" {
-                            await onMessage(message)
+                           let message = try? JSONDecoder().decode(NtfyMessage.self, from: data) {
+                            switch message.event {
+                            case "message":
+                                print("🔌 SSE: Received message for \(topic)")
+                                await onMessage(message)
+                            case "message_delete":
+                                print("🔌 SSE: Received delete for \(topic), id: \(message.id)")
+                                await onDelete?(message.id)
+                            case "message_clear":
+                                print("🔌 SSE: Received clear for \(topic)")
+                                await onClear?()
+                            default:
+                                break
+                            }
                         }
                     }
                 }
+                print("🔌 SSE: Stream ended for \(topic)")
             } catch {
                 if !Task.isCancelled {
-                    print("SSE Error: \(error)")
+                    print("🔌 SSE Error for \(topic): \(error)")
                 }
             }
         }
@@ -278,6 +306,49 @@ final class NtfyService {
             task.cancel()
         }
         activeTasks.removeAll()
+    }
+
+    // MARK: - Delete Message
+
+    /// Löscht eine Nachricht vom Server (ntfy v2.16+)
+    /// - Parameters:
+    ///   - serverURL: Server URL
+    ///   - topic: Topic Name
+    ///   - sequenceId: Die Sequence-ID der Nachricht (X-Sequence-ID)
+    func deleteMessage(
+        serverURL: String,
+        topic: String,
+        sequenceId: String,
+        username: String? = nil,
+        password: String? = nil,
+        token: String? = nil
+    ) async throws {
+        let urlString = "\(serverURL)/\(topic)/\(sequenceId)"
+        guard let url = URL(string: urlString) else {
+            throw NtfyError.invalidURL
+        }
+
+        let auth = authHeader(username: username, password: password, token: token)
+        var request = createRequest(url: url, method: "DELETE", auth: auth)
+
+        let (_, response) = try await session.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NtfyError.unknown
+        }
+
+        switch httpResponse.statusCode {
+        case 200..<300:
+            return
+        case 401:
+            throw NtfyError.unauthorized
+        case 403:
+            throw NtfyError.forbidden
+        case 404:
+            throw NtfyError.notFound
+        default:
+            throw NtfyError.serverError(httpResponse.statusCode)
+        }
     }
 
     // MARK: - Server Health Check
@@ -299,6 +370,109 @@ final class NtfyService {
         } catch {
             throw NtfyError.networkError(error)
         }
+    }
+
+    // MARK: - Store Messages
+
+    /// Zentrale Methode fuer Insert/Upsert/Dedup/Delete-Check.
+    /// Ersetzt die 3x duplizierte Inline-Logik in ContentView, TopicsView und MessagesView.
+    func storeMessages(
+        for topic: Topic,
+        messages: [NtfyMessage],
+        context: ModelContext
+    ) {
+        for message in messages {
+            let messageId = message.id
+
+            // 1. Check: existiert bereits?
+            let existingPredicate = #Predicate<StoredMessage> { $0.messageId == messageId }
+            let descriptor = FetchDescriptor(predicate: existingPredicate)
+
+            if let existing = (try? context.fetch(descriptor))?.first {
+                // UPSERT (SERV-02): Server hat Message mit bekannter ID erneut gesendet -> Update
+                existing.title = message.title
+                existing.message = message.message
+                existing.tags = message.tags
+                existing.priority = message.priority ?? 3
+                existing.clickURL = message.click
+                existing.iconURL = message.icon
+                if let attachment = message.attachment {
+                    existing.attachmentData = try? JSONEncoder().encode(StoredAttachment(from: attachment))
+                }
+                if let actions = message.actions {
+                    existing.actionsData = try? JSONEncoder().encode(actions.map { StoredAction(from: $0) })
+                }
+                continue
+            }
+
+            // 2. Deleted-Check: wurde vom User geloescht?
+            let topicName = topic.name
+            let serverURL = topic.serverURL
+            let deletedPredicate = #Predicate<DeletedMessage> { deleted in
+                deleted.messageId == messageId &&
+                deleted.topicName == topicName &&
+                deleted.serverURL == serverURL
+            }
+            let deletedDescriptor = FetchDescriptor(predicate: deletedPredicate)
+            guard (try? context.fetch(deletedDescriptor))?.isEmpty ?? true else { continue }
+
+            // 3. Insert
+            let storedMessage = StoredMessage(from: message, topic: topic)
+            context.insert(storedMessage)
+        }
+
+        // Update lastMessageAt mit dem neuesten Message-Timestamp
+        if let latest = messages.max(by: { $0.time < $1.time }) {
+            topic.lastMessageAt = Date(timeIntervalSince1970: TimeInterval(latest.time))
+        }
+
+        try? context.save()
+    }
+
+    // MARK: - Refresh Topics
+
+    /// Fetcht Nachrichten fuer alle Topics PARALLEL via TaskGroup und speichert sie via storeMessages.
+    /// Ersetzt ContentView.refreshAllTopics() und TopicsView.refreshAllTopics().
+    /// Netzwerk-Requests laufen parallel, ModelContext-Zugriffe (storeMessages) auf @MainActor.
+    func refreshTopics(
+        _ topics: [Topic],
+        context: ModelContext,
+        since: String
+    ) async {
+        print("🔄 Starting parallel refresh for \(topics.count) topics (since: \(since))")
+
+        await withTaskGroup(of: Void.self) { group in
+            for topic in topics {
+                group.addTask { [weak self] in
+                    guard let self else { return }
+
+                    let token = KeychainManager.shared.loadToken(serverURL: topic.serverURL)
+                    let credentials = KeychainManager.shared.loadCredentials(serverURL: topic.serverURL)
+
+                    do {
+                        let messages = try await self.fetchMessages(
+                            serverURL: topic.serverURL,
+                            topic: topic.name,
+                            since: since,
+                            username: credentials?.username,
+                            password: credentials?.password,
+                            token: token
+                        )
+
+                        print("🔄 Fetched \(messages.count) messages for \(topic.name)")
+
+                        // ModelContext ist nicht thread-safe — storeMessages auf MainActor ausfuehren
+                        await MainActor.run {
+                            self.storeMessages(for: topic, messages: messages, context: context)
+                        }
+                    } catch {
+                        print("❌ Failed to refresh topic \(topic.name): \(error)")
+                    }
+                }
+            }
+        }
+
+        print("✅ Parallel refresh complete")
     }
 
     // MARK: - Test Authentication
