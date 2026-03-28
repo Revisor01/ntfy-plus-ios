@@ -447,7 +447,13 @@ struct OnboardingView: View {
             do {
                 let normalizedURL = serverURL.normalizedServerURL(addProtocolIfMissing: true)
 
-                let testURL = URL(string: "\(normalizedURL)/test/json?poll=1")!
+                guard let testURL = URL(string: "\(normalizedURL)/test/json?poll=1") else {
+                    await MainActor.run {
+                        connectionError = "Ungültige Server-URL"
+                        isTestingConnection = false
+                    }
+                    return
+                }
                 var request = URLRequest(url: testURL)
                 request.timeoutInterval = 10
 
