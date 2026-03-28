@@ -198,7 +198,7 @@ struct EditTopicView: View {
 #Preview {
     let config = ModelConfiguration(isStoredInMemoryOnly: true)
     let container = try! ModelContainer(for: Topic.self, configurations: config)
-    let topic = Topic(name: "test-topic", serverURL: "https://ntfy.sh")
+    let topic = Topic(name: "test-topic", serverURL: "https://push.godsapp.de")
     container.mainContext.insert(topic)
 
     return EditTopicView(topic: topic)

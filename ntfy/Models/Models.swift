@@ -17,6 +17,12 @@ struct NtfyMessage: Codable, Identifiable, Hashable {
     let actions: [NtfyAction]?
     let attachment: NtfyAttachment?
     let icon: String?
+    let sequenceId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, time, expires, event, topic, message, title, tags, priority, click, actions, attachment, icon
+        case sequenceId = "sequence_id"
+    }
 
     var date: Date {
         Date(timeIntervalSince1970: TimeInterval(time))
@@ -203,6 +209,7 @@ struct StoredAttachment: Codable, Hashable {
 final class StoredMessage {
     @Attribute(.unique) var id: String
     var messageId: String
+    var sequenceId: String?
     var time: Int
     var title: String?
     var message: String?
@@ -222,6 +229,7 @@ final class StoredMessage {
     init(from ntfyMessage: NtfyMessage, topic: Topic) {
         self.id = UUID().uuidString
         self.messageId = ntfyMessage.id
+        self.sequenceId = ntfyMessage.sequenceId
         self.time = ntfyMessage.time
         self.title = ntfyMessage.title
         self.message = ntfyMessage.message
@@ -422,7 +430,7 @@ struct AppSettings {
     private static var defaults: UserDefaults { UserDefaults.standard }
 
     static var defaultServerURL: String {
-        get { defaults.string(forKey: "defaultServerURL") ?? "https://ntfy.sh" }
+        get { defaults.string(forKey: "defaultServerURL") ?? "https://push.godsapp.de" }
         set { defaults.set(newValue, forKey: "defaultServerURL") }
     }
 
