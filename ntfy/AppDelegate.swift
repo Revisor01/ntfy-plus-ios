@@ -93,6 +93,15 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
         let userInfo = response.notification.request.content.userInfo
 
+        // Handle click URL if present (ntfy v2.16+)
+        if let clickURLString = userInfo["click"] as? String,
+           let clickURL = URL(string: clickURLString) {
+            print("🔗 Opening click URL: \(clickURLString)")
+            Task { @MainActor in
+                UIApplication.shared.open(clickURL)
+            }
+        }
+
         // Navigate to topic if available
         if let topic = userInfo["topic"] as? String {
             Task { @MainActor in
