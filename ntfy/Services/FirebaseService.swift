@@ -114,7 +114,7 @@ final class FirebaseService {
 
     /// Get the current FCM token
     var currentToken: String? {
-        return UserDefaults.standard.string(forKey: "fcmToken")
+        return KeychainManager.shared.loadFCMToken()
     }
 
     /// Check if Firebase is properly configured
