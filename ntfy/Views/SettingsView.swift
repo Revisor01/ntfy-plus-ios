@@ -346,7 +346,7 @@ struct ServerEditorView: View {
         isLoading = true
         error = nil
 
-        let serverURL = url.trimmed().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let serverURL = url.trimmed().normalizedServerURL(addProtocolIfMissing: false)
 
         Task {
             // Test connection

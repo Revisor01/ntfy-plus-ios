@@ -248,7 +248,7 @@ struct AddTopicView: View {
 
         let serverURL: String
         if useCustomServer {
-            serverURL = customServerURL.trimmed().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            serverURL = customServerURL.trimmed().normalizedServerURL(addProtocolIfMissing: false)
         } else {
             serverURL = selectedServer?.url ?? ""
         }
