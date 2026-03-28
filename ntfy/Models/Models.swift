@@ -53,6 +53,7 @@ struct NtfyAction: Codable, Hashable {
     let headers: [String: String]?
     let body: String?
     let clear: Bool?
+    let value: String?    // NEU: fuer copy action (v2.17)
 }
 
 struct NtfyAttachment: Codable, Hashable {
@@ -153,13 +154,14 @@ final class Topic {
 
 // Storable action for SwiftData
 struct StoredAction: Codable, Hashable {
-    let action: String      // "view", "http", "broadcast"
+    let action: String      // "view", "http", "broadcast", "copy"
     let label: String
     let url: String?
     let method: String?     // GET, POST, etc.
     let headers: [String: String]?
     let body: String?
     let clear: Bool?
+    let value: String?      // NEU: fuer copy action (v2.17)
 
     init(from ntfyAction: NtfyAction) {
         self.action = ntfyAction.action
@@ -169,6 +171,7 @@ struct StoredAction: Codable, Hashable {
         self.headers = ntfyAction.headers
         self.body = ntfyAction.body
         self.clear = ntfyAction.clear
+        self.value = ntfyAction.value    // NEU
     }
 }
 
