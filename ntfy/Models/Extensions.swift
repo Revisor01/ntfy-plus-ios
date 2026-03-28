@@ -104,11 +104,26 @@ extension Color {
     }
 
     func toHex() -> String {
-        guard let components = UIColor(self).cgColor.components else { return "#000000" }
-        let r = Int(components[0] * 255)
-        let g = Int(components[1] * 255)
-        let b = Int(components[2] * 255)
-        return String(format: "#%02X%02X%02X", r, g, b)
+        let uiColor = UIColor(self)
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+
+        // getRed:green:blue:alpha: konvertiert automatisch aus jedem Farbraum inkl. Grayscale
+        if uiColor.getRed(&r, green: &g, blue: &b, alpha: &a) {
+            return String(format: "#%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
+        }
+
+        // Fallback fuer nicht-konvertierbare Farbraeume
+        guard let components = uiColor.cgColor.components else { return "#000000" }
+        if components.count == 2 {
+            // Grayscale: [white, alpha]
+            let w = Int(components[0] * 255)
+            return String(format: "#%02X%02X%02X", w, w, w)
+        }
+        guard components.count >= 3 else { return "#000000" }
+        return String(format: "#%02X%02X%02X",
+                      Int(components[0] * 255),
+                      Int(components[1] * 255),
+                      Int(components[2] * 255))
     }
 
     static let predefinedColors: [(name: String, color: Color)] = [
