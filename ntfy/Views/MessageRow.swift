@@ -5,6 +5,8 @@ struct MessageRow: View {
     let message: StoredMessage
 
     @State private var showingActions = false
+    @State private var pendingHTTPAction: StoredAction? = nil
+    @State private var showingHTTPConfirmation = false
 
     var body: some View {
         HStack(alignment: .top, spacing: AppSpacing.sm) {
@@ -137,6 +139,28 @@ struct MessageRow: View {
                 } label: {
                     Label("Link öffnen", systemImage: AppIcons.link)
                 }
+            }
+        }
+        .confirmationDialog(
+            "HTTP-Aktion ausführen?",
+            isPresented: $showingHTTPConfirmation,
+            titleVisibility: .visible
+        ) {
+            if let action = pendingHTTPAction,
+               let url = URL(string: action.url ?? "") {
+                Button("Ausführen") {
+                    Task {
+                        await executeHTTPAction(action, url: url)
+                    }
+                    pendingHTTPAction = nil
+                }
+            }
+            Button("Abbrechen", role: .cancel) {
+                pendingHTTPAction = nil
+            }
+        } message: {
+            if let url = pendingHTTPAction?.url {
+                Text(url)
             }
         }
     }
@@ -331,11 +355,10 @@ struct MessageRow: View {
             }
 
         case "http":
-            // Execute HTTP request
-            if let urlString = action.url, let url = URL(string: urlString) {
-                Task {
-                    await executeHTTPAction(action, url: url)
-                }
+            if action.url != nil, URL(string: action.url!) != nil {
+                pendingHTTPAction = action
+                showingHTTPConfirmation = true
+                return   // Haptic-Feedback NICHT auslösen — erst nach Bestätigung
             }
 
         default:
