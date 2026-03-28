@@ -59,6 +59,21 @@ extension String {
     var isNotEmpty: Bool {
         !isEmpty
     }
+
+    /// Normalisiert eine Server-URL: trimmt Whitespace, fügt optional https:// hinzu,
+    /// und entfernt abschließende Slashes.
+    /// - Parameter addProtocolIfMissing: true für Neu-Eingaben ohne Protokoll (Onboarding),
+    ///   false für bereits validierte URLs aus bestehenden Server-Objekten.
+    func normalizedServerURL(addProtocolIfMissing: Bool = true) -> String {
+        var result = self.trimmingCharacters(in: .whitespacesAndNewlines)
+        if addProtocolIfMissing {
+            if !result.hasPrefix("http://") && !result.hasPrefix("https://") {
+                result = "https://" + result
+            }
+        }
+        result = result.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return result
+    }
 }
 
 // MARK: - Color Extensions

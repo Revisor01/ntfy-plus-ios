@@ -445,11 +445,7 @@ struct OnboardingView: View {
 
         Task {
             do {
-                var normalizedURL = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !normalizedURL.hasPrefix("http://") && !normalizedURL.hasPrefix("https://") {
-                    normalizedURL = "https://" + normalizedURL
-                }
-                normalizedURL = normalizedURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                let normalizedURL = serverURL.normalizedServerURL(addProtocolIfMissing: true)
 
                 let testURL = URL(string: "\(normalizedURL)/test/json?poll=1")!
                 var request = URLRequest(url: testURL)
@@ -494,11 +490,7 @@ struct OnboardingView: View {
     }
 
     private func finishOnboarding() {
-        var normalizedURL = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !normalizedURL.hasPrefix("http://") && !normalizedURL.hasPrefix("https://") {
-            normalizedURL = "https://" + normalizedURL
-        }
-        normalizedURL = normalizedURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let normalizedURL = serverURL.normalizedServerURL(addProtocolIfMissing: true)
 
         if useAuth {
             if useToken {
