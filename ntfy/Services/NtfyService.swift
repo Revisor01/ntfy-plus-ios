@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Observation
 import SwiftData
 
@@ -41,15 +42,39 @@ final class NtfyService {
 
     private let session: URLSession
     private var activeTasks: [String: Task<Void, Never>] = [:]
+    private var activeConfigs: [String: SubscriptionConfig] = [:]
 
     var isConnecting = false
     var connectionError: NtfyError?
+    var connectionStatus: ConnectionStatus = .disconnected
+
+    private var pathMonitor: NWPathMonitor?
+    private var monitorQueue = DispatchQueue(label: "de.godsapp.ntfy.networkmonitor")
+
+    enum ConnectionStatus: Equatable {
+        case connected
+        case connecting
+        case disconnected
+        case reconnecting(attempt: Int)
+    }
+
+    private struct SubscriptionConfig: Sendable {
+        let serverURL: String
+        let topic: String
+        let username: String?
+        let password: String?
+        let token: String?
+        let onMessage: @MainActor @Sendable (NtfyMessage) -> Void
+        let onDelete: (@MainActor @Sendable (String) -> Void)?
+        let onClear: (@MainActor @Sendable () -> Void)?
+    }
 
     private init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 300
         self.session = URLSession(configuration: config)
+        startNetworkMonitor()
     }
 
     // MARK: - Authentication
@@ -221,73 +246,122 @@ final class NtfyService {
         username: String? = nil,
         password: String? = nil,
         token: String? = nil,
-        onMessage: @escaping @MainActor (NtfyMessage) -> Void,
-        onDelete: (@MainActor (String) -> Void)? = nil,
-        onClear: (@MainActor () -> Void)? = nil
+        onMessage: @escaping @MainActor @Sendable (NtfyMessage) -> Void,
+        onDelete: (@MainActor @Sendable (String) -> Void)? = nil,
+        onClear: (@MainActor @Sendable () -> Void)? = nil
     ) {
         let key = "\(serverURL)/\(topic)"
 
         // Cancel existing subscription
         activeTasks[key]?.cancel()
 
+        // Store config for reconnect (im @MainActor-Kontext — korrekt)
+        activeConfigs[key] = SubscriptionConfig(
+            serverURL: serverURL,
+            topic: topic,
+            username: username,
+            password: password,
+            token: token,
+            onMessage: onMessage,
+            onDelete: onDelete,
+            onClear: onClear
+        )
+
         print("🔌 SSE: Subscribing to \(topic)")
+
+        // WICHTIG: Alle Werte als lokale lets capturen BEVOR Task.detached startet.
+        // So wird activeConfigs im detached Task NIE referenziert — kein MainActor-Isolation-Problem.
+        let capturedServerURL = serverURL
+        let capturedTopic = topic
+        let capturedUsername = username
+        let capturedPassword = password
+        let capturedToken = token
+        let capturedOnMessage = onMessage
+        let capturedOnDelete = onDelete
+        let capturedOnClear = onClear
 
         let task = Task.detached { [weak self] in
             guard let self else { return }
 
-            let urlString = "\(serverURL)/\(topic)/sse"
+            let urlString = "\(capturedServerURL)/\(capturedTopic)/sse"
             guard let url = URL(string: urlString) else {
-                print("🔌 SSE: Invalid URL for \(topic)")
+                print("🔌 SSE: Invalid URL for \(capturedTopic)")
                 return
             }
 
-            let auth = await self.authHeader(username: username, password: password, token: token)
-            var request = await self.createRequest(url: url, auth: auth)
-            request.timeoutInterval = TimeInterval.infinity
+            var backoffSeconds: UInt64 = 1
+            let maxBackoff: UInt64 = 60
 
-            do {
-                print("🔌 SSE: Connecting to \(topic)...")
-                let (bytes, response) = try await self.session.bytes(for: request)
+            while !Task.isCancelled {
+                let auth = await self.authHeader(username: capturedUsername, password: capturedPassword, token: capturedToken)
+                var request = await self.createRequest(url: url, auth: auth)
+                request.timeoutInterval = TimeInterval.infinity
 
-                guard let httpResponse = response as? HTTPURLResponse,
-                      httpResponse.statusCode == 200 else {
-                    let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-                    print("🔌 SSE: Bad response \(code) for \(topic)")
-                    return
-                }
+                do {
+                    await MainActor.run { self.connectionStatus = .connecting }
+                    print("🔌 SSE: Connecting to \(capturedTopic)...")
 
-                print("🔌 SSE: Connected to \(topic)")
+                    let (bytes, response) = try await self.session.bytes(for: request)
 
-                for try await line in bytes.lines {
-                    if Task.isCancelled {
-                        print("🔌 SSE: Cancelled for \(topic)")
-                        break
+                    guard let httpResponse = response as? HTTPURLResponse,
+                          httpResponse.statusCode == 200 else {
+                        let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                        print("🔌 SSE: Bad response \(code) for \(capturedTopic)")
+                        break  // Nicht retrybar bei Auth-Fehlern etc.
                     }
 
-                    if line.hasPrefix("data: ") {
-                        let jsonString = String(line.dropFirst(6))
-                        if let data = jsonString.data(using: .utf8),
-                           let message = try? JSONDecoder().decode(NtfyMessage.self, from: data) {
-                            switch message.event {
-                            case "message":
-                                print("🔌 SSE: Received message for \(topic)")
-                                await onMessage(message)
-                            case "message_delete":
-                                print("🔌 SSE: Received delete for \(topic), id: \(message.id)")
-                                await onDelete?(message.id)
-                            case "message_clear":
-                                print("🔌 SSE: Received clear for \(topic)")
-                                await onClear?()
-                            default:
-                                break
+                    // Verbindung erfolgreich — Backoff zuruecksetzen
+                    backoffSeconds = 1
+                    await MainActor.run { self.connectionStatus = .connected }
+                    print("🔌 SSE: Connected to \(capturedTopic)")
+
+                    for try await line in bytes.lines {
+                        if Task.isCancelled {
+                            print("🔌 SSE: Cancelled for \(capturedTopic)")
+                            return
+                        }
+
+                        if line.hasPrefix("data: ") {
+                            let jsonString = String(line.dropFirst(6))
+                            if let data = jsonString.data(using: .utf8),
+                               let message = try? JSONDecoder().decode(NtfyMessage.self, from: data) {
+                                switch message.event {
+                                case "message":
+                                    print("🔌 SSE: Received message for \(capturedTopic)")
+                                    await capturedOnMessage(message)
+                                case "message_delete":
+                                    print("🔌 SSE: Received delete for \(capturedTopic), id: \(message.id)")
+                                    await capturedOnDelete?(message.id)
+                                case "message_clear":
+                                    print("🔌 SSE: Received clear for \(capturedTopic)")
+                                    await capturedOnClear?()
+                                default:
+                                    break
+                                }
                             }
                         }
                     }
+
+                    print("🔌 SSE: Stream ended for \(capturedTopic), reconnecting in \(backoffSeconds)s")
+
+                } catch {
+                    if Task.isCancelled { return }
+                    print("🔌 SSE Error for \(capturedTopic): \(error), retry in \(backoffSeconds)s")
                 }
-                print("🔌 SSE: Stream ended for \(topic)")
-            } catch {
+
+                // Backoff-Sleep
+                await MainActor.run {
+                    self.connectionStatus = .reconnecting(attempt: Int(backoffSeconds))
+                }
+                try? await Task.sleep(for: .seconds(backoffSeconds))
+
+                // Exponentielles Erhoehen mit Cap
+                backoffSeconds = min(backoffSeconds * 2, maxBackoff)
+            }
+
+            await MainActor.run {
                 if !Task.isCancelled {
-                    print("🔌 SSE Error for \(topic): \(error)")
+                    self.connectionStatus = .disconnected
                 }
             }
         }
@@ -299,6 +373,7 @@ final class NtfyService {
         let key = "\(serverURL)/\(topic)"
         activeTasks[key]?.cancel()
         activeTasks.removeValue(forKey: key)
+        activeConfigs.removeValue(forKey: key)
     }
 
     func unsubscribeAll() {
@@ -306,6 +381,59 @@ final class NtfyService {
             task.cancel()
         }
         activeTasks.removeAll()
+        activeConfigs.removeAll()
+        connectionStatus = .disconnected
+    }
+
+    // MARK: - Network Monitoring
+
+    func startNetworkMonitor() {
+        pathMonitor = NWPathMonitor()
+        pathMonitor?.pathUpdateHandler = { [weak self] path in
+            guard let self else { return }
+            if path.status == .satisfied {
+                print("🔌 Network: Path restored (\(path.availableInterfaces.map(\.name).joined(separator: ", ")))")
+                Task { @MainActor in
+                    await self.reconnectAll()
+                }
+            } else {
+                Task { @MainActor in
+                    self.connectionStatus = .disconnected
+                }
+            }
+        }
+        pathMonitor?.start(queue: monitorQueue)
+    }
+
+    func stopNetworkMonitor() {
+        pathMonitor?.cancel()
+        pathMonitor = nil
+    }
+
+    func reconnectAll() async {
+        print("🔌 Network: Reconnecting all \(activeConfigs.count) subscriptions")
+
+        // Alle aktiven Tasks canceln
+        for task in activeTasks.values {
+            task.cancel()
+        }
+        activeTasks.removeAll()
+
+        // Sofort neu subscriben mit gespeicherten Configs
+        // reconnectAll() laeuft im @MainActor-Kontext, daher ist Zugriff auf activeConfigs sicher.
+        // subscribe() erstellt intern neue lokale Kopien fuer den Task.detached-Block.
+        for (_, config) in activeConfigs {
+            subscribe(
+                serverURL: config.serverURL,
+                topic: config.topic,
+                username: config.username,
+                password: config.password,
+                token: config.token,
+                onMessage: config.onMessage,
+                onDelete: config.onDelete,
+                onClear: config.onClear
+            )
+        }
     }
 
     // MARK: - Delete Message
