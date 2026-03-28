@@ -147,7 +147,7 @@ struct TopicRow: View {
 
     let topic = Topic(
         name: "test-topic",
-        serverURL: "https://ntfy.sh",
+        serverURL: "https://push.godsapp.de",
         iconName: "bell.fill",
         colorHex: "#4574AD"
     )

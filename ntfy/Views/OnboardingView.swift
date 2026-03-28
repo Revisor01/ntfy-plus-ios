@@ -6,7 +6,7 @@ struct OnboardingView: View {
     @Binding var isOnboardingComplete: Bool
 
     @State private var currentPage = 0
-    @State private var serverURL = "https://ntfy.sh"
+    @State private var serverURL = "https://push.godsapp.de"
     @State private var useAuth = false
     @State private var username = ""
     @State private var password = ""
@@ -193,7 +193,7 @@ struct OnboardingView: View {
                         .font(.headline)
                         .foregroundStyle(.secondary)
 
-                    TextField("https://ntfy.sh", text: $serverURL)
+                    TextField("https://push.godsapp.de", text: $serverURL)
                         .textFieldStyle(.plain)
                         .padding(16)
                         .background(.white)
