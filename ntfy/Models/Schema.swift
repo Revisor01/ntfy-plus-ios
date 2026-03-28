@@ -5,7 +5,7 @@ import SwiftData
 // Null Migration-Stages = das aktuelle On-Disk-Format IST V1.
 
 enum NtfySchemaV1: VersionedSchema {
-    static var versionIdentifier = Schema.Version(1, 0, 0)
+    nonisolated(unsafe) static var versionIdentifier = Schema.Version(1, 0, 0)
     static var models: [any PersistentModel.Type] {
         [Topic.self, StoredMessage.self, Server.self, DeletedMessage.self]
     }
