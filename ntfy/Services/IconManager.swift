@@ -1,6 +1,64 @@
 import SwiftUI
 import Observation
 
+// MARK: - Attachment Image Disk Cache
+
+@MainActor
+final class AttachmentImageCache {
+    static let shared = AttachmentImageCache()
+
+    private let cacheDirectory: URL?
+
+    private init() {
+        cacheDirectory = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: "group.de.godsapp.ntfy")?
+            .appendingPathComponent("image_cache/")
+        if let dir = cacheDirectory {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+    }
+
+    private func cacheKey(for urlString: String) -> String {
+        let hash = urlString.utf8.reduce(5381) { ($0 << 5) &+ $0 &+ Int($1) }
+        return String(format: "%016x.img", abs(hash))
+    }
+
+    func loadFromDisk(for urlString: String) -> UIImage? {
+        guard let dir = cacheDirectory else { return nil }
+        let fileURL = dir.appendingPathComponent(cacheKey(for: urlString))
+
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
+
+        // Expiry-Check: Datei aelter als 7 Tage loeschen
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+           let creationDate = attrs[.creationDate] as? Date {
+            let age = Date().timeIntervalSince(creationDate)
+            if age > 7 * 24 * 3600 {
+                try? FileManager.default.removeItem(at: fileURL)
+                return nil
+            }
+        }
+
+        return UIImage(contentsOfFile: fileURL.path)
+    }
+
+    func saveToDisk(_ data: Data, for urlString: String) {
+        guard let dir = cacheDirectory else { return }
+        let fileURL = dir.appendingPathComponent(cacheKey(for: urlString))
+        try? data.write(to: fileURL)
+    }
+
+    func clearDiskCache() {
+        guard let dir = cacheDirectory else { return }
+        let contents = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        for file in contents {
+            try? FileManager.default.removeItem(at: file)
+        }
+    }
+}
+
+// MARK: - Icon Manager
+
 @Observable
 @MainActor
 final class IconManager {
@@ -144,6 +202,7 @@ final class IconManager {
 struct CachedAsyncImage: View {
     let url: String?
     let placeholder: String
+    var useDiskCache: Bool = false
 
     @State private var image: UIImage?
     @State private var isLoading = false
@@ -170,9 +229,40 @@ struct CachedAsyncImage: View {
     private func loadImage() async {
         guard let urlString = url, !urlString.isEmpty else { return }
 
-        isLoading = true
-        image = await IconManager.shared.loadIcon(from: urlString)
-        isLoading = false
+        if useDiskCache {
+            // Disk-Cache pruefen
+            if let cached = AttachmentImageCache.shared.loadFromDisk(for: urlString) {
+                image = cached
+                return
+            }
+
+            // Netzwerk-Download
+            isLoading = true
+            guard let url = URL(string: urlString) else {
+                isLoading = false
+                return
+            }
+            do {
+                let (data, response) = try await URLSession.shared.data(from: url)
+                guard let httpResponse = response as? HTTPURLResponse,
+                      httpResponse.statusCode == 200,
+                      let downloaded = UIImage(data: data) else {
+                    isLoading = false
+                    return
+                }
+                // Auf Disk speichern
+                AttachmentImageCache.shared.saveToDisk(data, for: urlString)
+                image = downloaded
+            } catch {
+                print("❌ CachedAsyncImage disk fetch failed: \(error)")
+            }
+            isLoading = false
+        } else {
+            // NSCache-basiertes Verhalten (IconManager)
+            isLoading = true
+            image = await IconManager.shared.loadIcon(from: urlString)
+            isLoading = false
+        }
     }
 }
 

@@ -189,7 +189,7 @@ struct MessageRow: View {
         ZStack(alignment: .topTrailing) {
             // Main icon
             if let iconURL = message.iconURL {
-                CachedAsyncImage(url: iconURL, placeholder: "app.badge")
+                CachedAsyncImage(url: iconURL, placeholder: "app.badge", useDiskCache: true)
                     .frame(width: 44, height: 44)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             } else {
