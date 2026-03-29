@@ -87,29 +87,78 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         completionHandler([.banner, .sound, .badge])
     }
 
-    // Handle notification tap
+    // Handle notification tap and actions
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
         let userInfo = response.notification.request.content.userInfo
 
-        // Handle click URL if present (ntfy v2.16+)
-        if let clickURLString = userInfo["click"] as? String,
-           let clickURL = URL(string: clickURLString) {
-            print("🔗 Opening click URL: \(clickURLString)")
-            Task { @MainActor in
-                UIApplication.shared.open(clickURL)
+        switch response.actionIdentifier {
+        case "MARK_READ":
+            // userInfo key "messageId" for local notifications, "id" for push
+            let messageId = (userInfo["messageId"] as? String) ?? (userInfo["id"] as? String)
+            if let messageId = messageId {
+                Task { @MainActor in
+                    // 1. Badge via shared file dekrementieren
+                    if let url = FileManager.default
+                        .containerURL(forSecurityApplicationGroupIdentifier: "group.de.godsapp.ntfy")?
+                        .appendingPathComponent("badge_count.txt") {
+                        let current = (try? String(contentsOf: url, encoding: .utf8))
+                            .flatMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) } ?? 0
+                        let newCount = max(0, current - 1)
+                        try? String(newCount).write(to: url, atomically: true, encoding: .utf8)
+                        await NotificationService.shared.setBadgeCount(newCount)
+                    }
+                    // 2. Notification entfernen
+                    NotificationService.shared.removeNotification(withIdentifier: messageId)
+                    // 3. SwiftData-Update delegieren
+                    NotificationCenter.default.post(
+                        name: .markMessageRead,
+                        object: nil,
+                        userInfo: ["messageId": messageId]
+                    )
+                }
             }
-        }
 
-        // Navigate to topic if available
-        if let topic = userInfo["topic"] as? String {
-            Task { @MainActor in
-                NotificationCenter.default.post(
-                    name: .navigateToTopic,
-                    object: nil,
-                    userInfo: ["topic": topic]
-                )
+        case "REPLY":
+            if let textResponse = response as? UNTextInputNotificationResponse,
+               let topicName = userInfo["topic"] as? String {
+                let replyText = textResponse.userText
+                Task { @MainActor in
+                    let serverURL = AppSettings.defaultServerURL
+                    let token = KeychainManager.shared.loadToken(serverURL: serverURL)
+                    let credentials = KeychainManager.shared.loadCredentials(serverURL: serverURL)
+                    try? await NtfyService.shared.publish(
+                        serverURL: serverURL,
+                        topic: topicName,
+                        message: replyText,
+                        username: credentials?.username,
+                        password: credentials?.password,
+                        token: token
+                    )
+                }
+            }
+
+        default:
+            // Normal tap (UNNotificationDefaultActionIdentifier) — open app and navigate
+            // Handle click URL if present (ntfy v2.16+)
+            if let clickURLString = userInfo["click"] as? String,
+               let clickURL = URL(string: clickURLString) {
+                print("🔗 Opening click URL: \(clickURLString)")
+                Task { @MainActor in
+                    UIApplication.shared.open(clickURL)
+                }
+            }
+
+            // Navigate to topic if available
+            if let topic = userInfo["topic"] as? String {
+                Task { @MainActor in
+                    NotificationCenter.default.post(
+                        name: .navigateToTopic,
+                        object: nil,
+                        userInfo: ["topic": topic]
+                    )
+                }
             }
         }
 
