@@ -197,4 +197,5 @@ extension Notification.Name {
     static let navigateToTopic = Notification.Name("navigateToTopic")
     static let messageReceived = Notification.Name("messageReceived")
     static let apnsTokenReceived = Notification.Name("apnsTokenReceived")
+    static let markMessageRead = Notification.Name("markMessageRead")
 }

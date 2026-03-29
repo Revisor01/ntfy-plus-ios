@@ -80,6 +80,21 @@ struct ContentView: View {
                 selectedTopic = topics.first { $0.name == topicName }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .markMessageRead)) { notification in
+            if let messageId = notification.userInfo?["messageId"] as? String {
+                let predicate = #Predicate<StoredMessage> { $0.messageId == messageId }
+                let descriptor = FetchDescriptor(predicate: predicate)
+                if let results = try? modelContext.fetch(descriptor),
+                   let message = results.first,
+                   !message.isRead {
+                    message.isRead = true
+                    if let topic = message.topic {
+                        topic.unreadCount = max(0, topic.unreadCount - 1)
+                    }
+                    try? modelContext.save()
+                }
+            }
+        }
     }
 
     private func requestNotificationPermission() {
