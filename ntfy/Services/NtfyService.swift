@@ -547,11 +547,16 @@ final class NtfyService {
             // 3. Insert
             let storedMessage = StoredMessage(from: message, topic: topic)
             context.insert(storedMessage)
+            // Neue Messages sind immer ungelesen — denormalisierten Zaehler inkrementieren
+            topic.unreadCount += 1
         }
 
-        // Update lastMessageAt mit dem neuesten Message-Timestamp
+        // Update lastMessageAt und denormalisierte Preview-Properties
         if let latest = messages.max(by: { $0.time < $1.time }) {
             topic.lastMessageAt = Date(timeIntervalSince1970: TimeInterval(latest.time))
+            topic.lastMessagePreview = latest.message ?? latest.title
+            topic.lastMessagePriority = latest.priority ?? 3
+            topic.lastMessageIconURL = latest.icon
         }
 
         try? context.save()

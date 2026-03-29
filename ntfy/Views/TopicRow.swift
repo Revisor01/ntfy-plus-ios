@@ -4,24 +4,6 @@ import SwiftData
 struct TopicRow: View {
     let topic: Topic
 
-    @Query private var recentMessages: [StoredMessage]
-
-    init(topic: Topic) {
-        self.topic = topic
-        let topicId = topic.id
-        _recentMessages = Query(
-            filter: #Predicate<StoredMessage> { message in
-                message.topic?.id == topicId
-            },
-            sort: \StoredMessage.time,
-            order: .reverse
-        )
-    }
-
-    private var lastMessage: StoredMessage? {
-        recentMessages.first
-    }
-
     var body: some View {
         HStack(spacing: AppSpacing.sm) {
             // Topic Icon
@@ -42,22 +24,16 @@ struct TopicRow: View {
 
                     Spacer()
 
-                    if let lastMessage = lastMessage {
-                        Text(lastMessage.date.smartFormatted())
+                    if let lastMessageAt = topic.lastMessageAt {
+                        Text(lastMessageAt.smartFormatted())
                             .font(AppFonts.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
 
                 HStack {
-                    if let lastMessage = lastMessage {
-                        // Show emoji tags if available
-                        if !lastMessage.emojiTags.isEmpty {
-                            Text(lastMessage.emojiTags.joinedEmojis())
-                                .font(AppFonts.caption)
-                        }
-
-                        Text(lastMessage.message ?? lastMessage.title ?? "")
+                    if let preview = topic.lastMessagePreview {
+                        Text(preview)
                             .font(AppFonts.subheadline)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -86,11 +62,6 @@ struct TopicRow: View {
         .padding(.vertical, AppSpacing.xxs)
     }
 
-    // Get the most recent icon URL from messages
-    private var latestIconURL: String? {
-        recentMessages.first(where: { $0.iconURL != nil })?.iconURL
-    }
-
     // Generate a color from topic name for consistent colors
     private var generatedColor: Color {
         if let hex = topic.colorHex {
@@ -108,7 +79,7 @@ struct TopicRow: View {
     @ViewBuilder
     private var topicIcon: some View {
         // Priority 1: Show icon from latest message (e.g. Sonarr logo) if enabled
-        if topic.shouldUseMessageIcon, let iconURL = latestIconURL {
+        if topic.shouldUseMessageIcon, let iconURL = topic.lastMessageIconURL {
             CachedAsyncImage(url: iconURL, placeholder: "app.badge")
                 .frame(width: 44, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
