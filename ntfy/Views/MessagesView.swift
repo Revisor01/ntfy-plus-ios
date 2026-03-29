@@ -16,6 +16,7 @@ struct MessagesView: View {
     @State private var showingClearConfirm = false
     @State private var showingUnsubscribeConfirm = false
     @State private var searchText = ""
+    @State private var showOnlyStarred = false
 
     @Environment(\.dismiss) private var dismiss
 
@@ -43,12 +44,17 @@ struct MessagesView: View {
     }
 
     private var filteredMessages: [StoredMessage] {
-        let visibleMessages = messages.filter { !deletedMessageIds.contains($0.messageId) }
-        guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return visibleMessages
+        var result = messages.filter { !deletedMessageIds.contains($0.messageId) }
+
+        // Star-Filter (Toolbar-Toggle)
+        if showOnlyStarred {
+            result = result.filter { $0.isStarred }
         }
+
+        // Suche (kombiniert mit Star-Filter)
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return visibleMessages.filter { message in
+        guard !query.isEmpty else { return result }
+        return result.filter { message in
             (message.title?.localizedCaseInsensitiveContains(query) == true) ||
             (message.message?.localizedCaseInsensitiveContains(query) == true) ||
             (message.tags?.contains { $0.localizedCaseInsensitiveContains(query) } == true)
@@ -71,6 +77,16 @@ struct MessagesView: View {
         .navigationBarTitleDisplayMode(.large)
         .searchable(text: $searchText, prompt: "Nachrichten durchsuchen")
         .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    showOnlyStarred.toggle()
+                } label: {
+                    Image(systemName: showOnlyStarred ? "star.fill" : "star")
+                        .foregroundStyle(showOnlyStarred ? .yellow : .secondary)
+                }
+                .accessibilityLabel(showOnlyStarred ? "Alle Nachrichten" : "Nur Favoriten")
+            }
+
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button {
@@ -159,6 +175,16 @@ struct MessagesView: View {
                             )
                         }
                         .tint(AppColors.primary)
+
+                        Button {
+                            toggleStar(message)
+                        } label: {
+                            Label(
+                                message.isStarred ? "Entfernen" : "Favorit",
+                                systemImage: message.isStarred ? "star.slash" : "star"
+                            )
+                        }
+                        .tint(.yellow)
                     }
             }
 
@@ -197,6 +223,14 @@ struct MessagesView: View {
         }
         Task {
             await updateBadgeCount()
+        }
+    }
+
+    private func toggleStar(_ message: StoredMessage) {
+        message.isStarred.toggle()
+        if AppSettings.hapticFeedback {
+            let generator = UIImpactFeedbackGenerator(style: .light)
+            generator.impactOccurred()
         }
     }
 
