@@ -39,6 +39,8 @@ final class NotificationService: NSObject {
     // MARK: - Local Notifications
 
     func scheduleLocalNotification(for message: NtfyMessage, topic: String) async {
+        guard AppSettings.notificationsEnabled else { return }
+
         let content = UNMutableNotificationContent()
 
         // Title - don't show topic as subtitle
