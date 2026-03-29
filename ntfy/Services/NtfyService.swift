@@ -561,7 +561,7 @@ final class NtfyService {
 
     /// Fetcht Nachrichten fuer alle Topics PARALLEL via TaskGroup und speichert sie via storeMessages.
     /// Ersetzt ContentView.refreshAllTopics() und TopicsView.refreshAllTopics().
-    /// Netzwerk-Requests laufen parallel, ModelContext-Zugriffe (storeMessages) auf @MainActor.
+    /// Netzwerk-Requests laufen parallel, Ergebnisse werden sequentiell auf @MainActor gespeichert.
     func refreshTopics(
         _ topics: [Topic],
         context: ModelContext,
@@ -569,34 +569,54 @@ final class NtfyService {
     ) async {
         print("🔄 Starting parallel refresh for \(topics.count) topics (since: \(since))")
 
-        await withTaskGroup(of: Void.self) { group in
+        // Sendable Struktur fuer Fetch-Ergebnisse
+        struct FetchResult: Sendable {
+            let serverURL: String
+            let topicName: String
+            let messages: [NtfyMessage]
+        }
+
+        // Phase 1: Parallele Netzwerk-Requests — nur Sendable-Werte capturen
+        let results: [FetchResult] = await withTaskGroup(of: FetchResult?.self) { group in
             for topic in topics {
+                let serverURL = topic.serverURL
+                let topicName = topic.name
+                let token = KeychainManager.shared.loadToken(serverURL: serverURL)
+                let credentials = KeychainManager.shared.loadCredentials(serverURL: serverURL)
+
                 group.addTask { [weak self] in
-                    guard let self else { return }
-
-                    let token = KeychainManager.shared.loadToken(serverURL: topic.serverURL)
-                    let credentials = KeychainManager.shared.loadCredentials(serverURL: topic.serverURL)
-
+                    guard let self else { return nil }
                     do {
                         let messages = try await self.fetchMessages(
-                            serverURL: topic.serverURL,
-                            topic: topic.name,
+                            serverURL: serverURL,
+                            topic: topicName,
                             since: since,
                             username: credentials?.username,
                             password: credentials?.password,
                             token: token
                         )
-
-                        print("🔄 Fetched \(messages.count) messages for \(topic.name)")
-
-                        // ModelContext ist nicht thread-safe — storeMessages auf MainActor ausfuehren
-                        await MainActor.run {
-                            self.storeMessages(for: topic, messages: messages, context: context)
-                        }
+                        print("🔄 Fetched \(messages.count) messages for \(topicName)")
+                        return FetchResult(serverURL: serverURL, topicName: topicName, messages: messages)
                     } catch {
-                        print("❌ Failed to refresh topic \(topic.name): \(error)")
+                        print("❌ Failed to refresh topic \(topicName): \(error)")
+                        return nil
                     }
                 }
+            }
+
+            var collected: [FetchResult] = []
+            for await result in group {
+                if let result = result {
+                    collected.append(result)
+                }
+            }
+            return collected
+        }
+
+        // Phase 2: Sequentielles Speichern auf @MainActor (ModelContext ist nicht thread-safe)
+        for result in results {
+            if let topic = topics.first(where: { $0.serverURL == result.serverURL && $0.name == result.topicName }) {
+                storeMessages(for: topic, messages: result.messages, context: context)
             }
         }
 

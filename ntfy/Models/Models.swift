@@ -118,6 +118,12 @@ final class Topic {
     var createdAt: Date
     var lastMessageAt: Date?
 
+    // Denormalisierte Performance-Properties (persistiert, kein O(n) Computed)
+    @Attribute var unreadCount: Int = 0
+    @Attribute var lastMessagePreview: String?
+    @Attribute var lastMessagePriority: Int = 3
+    @Attribute var lastMessageIconURL: String?
+
     @Relationship(deleteRule: .cascade, inverse: \StoredMessage.topic)
     var messages: [StoredMessage]?
 
@@ -132,15 +138,15 @@ final class Topic {
         self.useMessageIcon = true
         self.isMuted = false
         self.createdAt = Date()
+        self.unreadCount = 0
+        self.lastMessagePreview = nil
+        self.lastMessagePriority = 3
+        self.lastMessageIconURL = nil
         self.messages = []
     }
 
     var fullURL: String {
         "\(serverURL)/\(name)"
-    }
-
-    var unreadCount: Int {
-        messages?.filter { !$0.isRead }.count ?? 0
     }
 
     var displayLetter: String {
