@@ -53,7 +53,7 @@ struct ntfyApp: App {
 
     private func retryModelContainer() {
         do {
-            let schema = Schema(NtfySchemaV2.models)
+            let schema = Schema(NtfySchemaV3.models)
             let modelConfiguration = ModelConfiguration(
                 schema: schema,
                 isStoredInMemoryOnly: false,
