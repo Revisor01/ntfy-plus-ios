@@ -35,6 +35,13 @@ struct MessageRow: View {
                         .font(AppFonts.caption)
                         .foregroundStyle(.secondary)
 
+                    // Starred indicator
+                    if message.isStarred {
+                        Image(systemName: "star.fill")
+                            .font(.caption)
+                            .foregroundStyle(.yellow)
+                    }
+
                     // Unread indicator
                     if !message.isRead {
                         Circle()
