@@ -471,6 +471,15 @@ struct AppSettings {
         get { defaults.string(forKey: "accentColorHex") ?? "#4574AD" }
         set { defaults.set(newValue, forKey: "accentColorHex") }
     }
+
+    /// Nachrichten-Retention in Tagen. Default 30. Wert -1 = nie loeschen.
+    static var messageRetentionDays: Int {
+        get {
+            let value = defaults.integer(forKey: "messageRetentionDays")
+            return value == 0 ? 30 : value
+        }
+        set { defaults.set(newValue, forKey: "messageRetentionDays") }
+    }
 }
 
 enum AppTheme: String, CaseIterable {
