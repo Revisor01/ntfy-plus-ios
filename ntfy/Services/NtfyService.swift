@@ -562,6 +562,49 @@ final class NtfyService {
         try? context.save()
     }
 
+    // MARK: - Cleanup
+
+    /// Loescht DeletedMessage-Records aelter als 7 Tage.
+    func cleanupDeletedMessages(context: ModelContext) {
+        let cutoff = Date().addingTimeInterval(-7 * 24 * 3600)
+        let predicate = #Predicate<DeletedMessage> { $0.deletedAt < cutoff }
+        let descriptor = FetchDescriptor(predicate: predicate)
+        let stale = (try? context.fetch(descriptor)) ?? []
+        for record in stale {
+            context.delete(record)
+        }
+        if !stale.isEmpty {
+            try? context.save()
+            print("🔄 Cleanup: deleted \(stale.count) expired DeletedMessage records")
+        }
+    }
+
+    /// Loescht StoredMessages aelter als die konfigurierte Retention.
+    /// Dekrementiert topic.unreadCount fuer noch ungelesene Messages.
+    func cleanupOldMessages(context: ModelContext) {
+        let retentionDays = AppSettings.messageRetentionDays
+        guard retentionDays != -1 else { return }
+
+        let cutoff = Date().addingTimeInterval(-Double(retentionDays) * 24 * 3600)
+        let cutoffTimestamp = Int(cutoff.timeIntervalSince1970)
+
+        let predicate = #Predicate<StoredMessage> { $0.time < cutoffTimestamp }
+        let descriptor = FetchDescriptor(predicate: predicate)
+        let old = (try? context.fetch(descriptor)) ?? []
+
+        for message in old {
+            if !message.isRead, let topic = message.topic {
+                topic.unreadCount = max(0, topic.unreadCount - 1)
+            }
+            context.delete(message)
+        }
+
+        if !old.isEmpty {
+            try? context.save()
+            print("🔄 Cleanup: deleted \(old.count) messages older than \(retentionDays) days")
+        }
+    }
+
     // MARK: - Refresh Topics
 
     /// Fetcht Nachrichten fuer alle Topics PARALLEL via TaskGroup und speichert sie via storeMessages.
@@ -573,6 +616,10 @@ final class NtfyService {
         since: String
     ) async {
         print("🔄 Starting parallel refresh for \(topics.count) topics (since: \(since))")
+
+        // Cleanup abgelaufener Records vor dem Refresh
+        cleanupDeletedMessages(context: context)
+        cleanupOldMessages(context: context)
 
         // Sendable Struktur fuer Fetch-Ergebnisse
         struct FetchResult: Sendable {

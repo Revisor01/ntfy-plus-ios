@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var hapticFeedback = AppSettings.hapticFeedback
     @State private var notificationsEnabled = AppSettings.notificationsEnabled
 
+    @State private var retentionDays = AppSettings.messageRetentionDays
     @State private var showingDeleteConfirmation = false
     @State private var showingAddServer = false
     @State private var showingServerEditor: Server?
@@ -122,6 +123,18 @@ struct SettingsView: View {
                     Button("Cache leeren") {
                         IconManager.shared.clearCache()
                         AttachmentImageCache.shared.clearDiskCache()
+                    }
+
+                    Picker("Nachrichten aufbewahren", selection: $retentionDays) {
+                        Text("7 Tage").tag(7)
+                        Text("14 Tage").tag(14)
+                        Text("30 Tage").tag(30)
+                        Text("60 Tage").tag(60)
+                        Text("90 Tage").tag(90)
+                        Text("Unbegrenzt").tag(-1)
+                    }
+                    .onChange(of: retentionDays) { _, newValue in
+                        AppSettings.messageRetentionDays = newValue
                     }
 
                     Button("Alle Nachrichten löschen", role: .destructive) {
