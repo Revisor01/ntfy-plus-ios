@@ -121,6 +121,7 @@ struct SettingsView: View {
 
                     Button("Cache leeren") {
                         IconManager.shared.clearCache()
+                        AttachmentImageCache.shared.clearDiskCache()
                     }
 
                     Button("Alle Nachrichten löschen", role: .destructive) {
