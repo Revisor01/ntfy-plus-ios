@@ -227,6 +227,7 @@ final class StoredMessage {
     var clickURL: String?
     var iconURL: String?
     var isRead: Bool
+    var isStarred: Bool = false
     var receivedAt: Date
 
     // New: Attachment and Actions
