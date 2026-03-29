@@ -11,7 +11,47 @@ enum NtfySchemaV1: VersionedSchema {
     }
 }
 
+// MARK: - Schema V2
+// Erweitert V1 mit denormalisierten Performance-Properties auf Topic:
+// unreadCount, lastMessagePreview, lastMessagePriority, lastMessageIconURL
+
+enum NtfySchemaV2: VersionedSchema {
+    nonisolated(unsafe) static var versionIdentifier = Schema.Version(2, 0, 0)
+    static var models: [any PersistentModel.Type] {
+        [Topic.self, StoredMessage.self, Server.self, DeletedMessage.self]
+    }
+}
+
+// MARK: - Migration Plan
+
 enum NtfyMigrationPlan: SchemaMigrationPlan {
-    static var schemas: [any VersionedSchema.Type] { [NtfySchemaV1.self] }
-    static var stages: [MigrationStage] { [] }
+    static var schemas: [any VersionedSchema.Type] { [NtfySchemaV1.self, NtfySchemaV2.self] }
+    static var stages: [MigrationStage] { [migrateV1toV2] }
+
+    static let migrateV1toV2 = MigrationStage.custom(
+        fromVersion: NtfySchemaV1.self,
+        toVersion: NtfySchemaV2.self,
+        willMigrate: nil,
+        didMigrate: { context in
+            let topics = (try? context.fetch(FetchDescriptor<Topic>())) ?? []
+
+            for topic in topics {
+                // unreadCount: Ungelesene Nachrichten zaehlen
+                topic.unreadCount = topic.messages?.filter { !$0.isRead }.count ?? 0
+
+                // Neueste Message nach time DESC sortiert
+                if let latestMessage = topic.messages?.max(by: { $0.time < $1.time }) {
+                    topic.lastMessagePreview = latestMessage.message ?? latestMessage.title
+                    topic.lastMessagePriority = latestMessage.priority
+                    topic.lastMessageIconURL = latestMessage.iconURL
+                } else {
+                    topic.lastMessagePreview = nil
+                    topic.lastMessagePriority = 3
+                    topic.lastMessageIconURL = nil
+                }
+            }
+
+            try? context.save()
+        }
+    )
 }

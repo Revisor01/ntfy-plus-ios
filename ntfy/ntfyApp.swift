@@ -6,49 +6,39 @@ struct ntfyApp: App {
     // Register AppDelegate for Firebase
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
-    var modelContainer: ModelContainer?
+    @State private var modelContainer: ModelContainer?
 
     @State private var ntfyService = NtfyService.shared
     @State private var iconManager = IconManager.shared
     @State private var containerInitError: Error?
 
     init() {
-        do {
-            let schema = Schema(NtfySchemaV1.models)
-            let modelConfiguration = ModelConfiguration(
-                schema: schema,
-                isStoredInMemoryOnly: false,
-                cloudKitDatabase: .none
-            )
-            modelContainer = try ModelContainer(
-                for: schema,
-                migrationPlan: NtfyMigrationPlan.self,
-                configurations: [modelConfiguration]
-            )
-        } catch {
-            modelContainer = nil
-            containerInitError = error
-        }
-
         // Register notification categories (delegate is now handled by AppDelegate)
         NotificationService.shared.registerNotificationCategories()
     }
 
     var body: some Scene {
         WindowGroup {
-            if let container = modelContainer {
-                ContentView()
-                    .modelContainer(container)
-                    .environment(ntfyService)
-                    .environment(iconManager)
-                    .preferredColorScheme(colorScheme)
-                    .tint(Color(hex: AppSettings.accentColorHex))
-            } else {
-                ModelContainerErrorView(
-                    error: containerInitError,
-                    onRetry: { retryModelContainer() },
-                    onDeleteData: { deleteAndRetryModelContainer() }
-                )
+            Group {
+                if let container = modelContainer {
+                    ContentView()
+                        .modelContainer(container)
+                        .environment(ntfyService)
+                        .environment(iconManager)
+                        .preferredColorScheme(colorScheme)
+                        .tint(Color(hex: AppSettings.accentColorHex))
+                } else {
+                    ModelContainerErrorView(
+                        error: containerInitError,
+                        onRetry: { retryModelContainer() },
+                        onDeleteData: { deleteAndRetryModelContainer() }
+                    )
+                }
+            }
+            .onAppear {
+                if modelContainer == nil && containerInitError == nil {
+                    retryModelContainer()
+                }
             }
         }
     }
@@ -61,9 +51,9 @@ struct ntfyApp: App {
         }
     }
 
-    private mutating func retryModelContainer() {
+    private func retryModelContainer() {
         do {
-            let schema = Schema(NtfySchemaV1.models)
+            let schema = Schema(NtfySchemaV2.models)
             let modelConfiguration = ModelConfiguration(
                 schema: schema,
                 isStoredInMemoryOnly: false,
@@ -76,11 +66,12 @@ struct ntfyApp: App {
             )
             containerInitError = nil
         } catch {
+            modelContainer = nil
             containerInitError = error
         }
     }
 
-    private mutating func deleteAndRetryModelContainer() {
+    private func deleteAndRetryModelContainer() {
         // Delete SwiftData store files
         let url = URL.applicationSupportDirectory.appending(path: "default.store")
         for suffix in ["", "-shm", "-wal"] {
