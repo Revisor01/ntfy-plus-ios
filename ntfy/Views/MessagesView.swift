@@ -154,6 +154,10 @@ struct MessagesView: View {
     private func markAsRead(_ message: StoredMessage) {
         if !message.isRead {
             message.isRead = true
+            // Denormalisierten Zaehler dekrementieren
+            if let topicRef = message.topic {
+                topicRef.unreadCount = max(0, topicRef.unreadCount - 1)
+            }
             // Remove notification and update badge
             NotificationService.shared.removeNotification(withIdentifier: message.messageId)
             Task {
@@ -163,7 +167,16 @@ struct MessagesView: View {
     }
 
     private func toggleRead(_ message: StoredMessage) {
+        let wasUnread = !message.isRead
         message.isRead.toggle()
+        // Denormalisierten Zaehler anpassen
+        if let topicRef = message.topic {
+            if message.isRead && wasUnread {
+                topicRef.unreadCount = max(0, topicRef.unreadCount - 1)
+            } else if !message.isRead && !wasUnread {
+                topicRef.unreadCount += 1
+            }
+        }
         if message.isRead {
             NotificationService.shared.removeNotification(withIdentifier: message.messageId)
         }
@@ -177,6 +190,8 @@ struct MessagesView: View {
             message.isRead = true
             NotificationService.shared.removeNotification(withIdentifier: message.messageId)
         }
+        // unreadCount auf Topic direkt auf 0 setzen (alle gelesen)
+        topic.unreadCount = 0
         Task {
             await NotificationService.shared.clearBadge()
         }
@@ -211,6 +226,11 @@ struct MessagesView: View {
             }
         }
 
+        // Wenn Message ungelesen war, Zaehler dekrementieren
+        if !message.isRead {
+            topic.unreadCount = max(0, topic.unreadCount - 1)
+        }
+
         withAnimation {
             modelContext.delete(message)
         }
@@ -232,6 +252,9 @@ struct MessagesView: View {
             modelContext.insert(deletedRecord)
             NotificationService.shared.removeNotification(withIdentifier: message.messageId)
         }
+
+        // Alle Messages geloescht — unreadCount auf 0
+        topic.unreadCount = 0
 
         // Delete all messages locally
         withAnimation {

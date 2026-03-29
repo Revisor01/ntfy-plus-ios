@@ -230,6 +230,7 @@ struct TopicsView: View {
             for message in messages where !message.isRead {
                 message.isRead = true
             }
+            topic.unreadCount = 0
             try? modelContext.save()
         }
     }
@@ -240,6 +241,7 @@ struct TopicsView: View {
                 for message in messages where !message.isRead {
                     message.isRead = true
                 }
+                topic.unreadCount = 0
             }
         }
         try? modelContext.save()
