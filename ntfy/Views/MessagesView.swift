@@ -15,6 +15,7 @@ struct MessagesView: View {
     @State private var showingPublish = false
     @State private var showingClearConfirm = false
     @State private var showingUnsubscribeConfirm = false
+    @State private var searchText = ""
 
     @Environment(\.dismiss) private var dismiss
 
@@ -41,9 +42,22 @@ struct MessagesView: View {
         Set(deletedMessages.map { $0.messageId })
     }
 
+    private var filteredMessages: [StoredMessage] {
+        let visibleMessages = messages.filter { !deletedMessageIds.contains($0.messageId) }
+        guard !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return visibleMessages
+        }
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return visibleMessages.filter { message in
+            (message.title?.localizedCaseInsensitiveContains(query) == true) ||
+            (message.message?.localizedCaseInsensitiveContains(query) == true) ||
+            (message.tags?.contains { $0.localizedCaseInsensitiveContains(query) } == true)
+        }
+    }
+
     var body: some View {
         Group {
-            if messages.isEmpty {
+            if filteredMessages.isEmpty {
                 ContentUnavailableView {
                     Label("Keine Nachrichten", systemImage: AppIcons.empty)
                 } description: {
@@ -55,6 +69,7 @@ struct MessagesView: View {
         }
         .navigationTitle(topic.name)
         .navigationBarTitleDisplayMode(.large)
+        .searchable(text: $searchText, prompt: "Nachrichten durchsuchen")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
@@ -122,7 +137,7 @@ struct MessagesView: View {
 
     private var messageList: some View {
         List {
-            ForEach(messages) { message in
+            ForEach(filteredMessages) { message in
                 MessageRow(message: message)
                     .onAppear {
                         markAsRead(message)
