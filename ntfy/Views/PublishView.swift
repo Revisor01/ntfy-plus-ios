@@ -135,6 +135,14 @@ struct PublishView: View {
             }
             .onAppear {
                 topic = selectedTopic ?? topics.first
+                if let t = topic, t.defaultPriority != 0 {
+                    priority = Priority(rawValue: t.defaultPriority) ?? .default
+                }
+            }
+            .onChange(of: topic) { _, newTopic in
+                if let t = newTopic, t.defaultPriority != 0 {
+                    priority = Priority(rawValue: t.defaultPriority) ?? .default
+                }
             }
         }
     }
