@@ -33,6 +33,9 @@
 		A10000012333000F2 /* LockScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000012333000F3 /* LockScreenView.swift */; };
 		F8D1E1202F0FFCDB0028E66C /* NotificationServiceExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F8D1E1192F0FFCDA0028E66C /* NotificationServiceExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		F8F170AE2F0FAFE800F0234B /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = F8F170AD2F0FAFE800F0234B /* FirebaseMessaging */; };
+		A9000001233300004 /* NtfyWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9000001233300006 /* NtfyWidget.swift */; };
+		A9000001233300005 /* NtfyWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9000001233300007 /* NtfyWidgetBundle.swift */; };
+		A9000001233300018 /* NtfyWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A9000001233300002 /* NtfyWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -42,6 +45,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = F8D1E1182F0FFCDA0028E66C;
 			remoteInfo = NotificationServiceExtension;
+		};
+		A9000001233300017 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000001233399900 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A9000001233300001;
+			remoteInfo = NtfyWidget;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -53,6 +63,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				F8D1E1202F0FFCDB0028E66C /* NotificationServiceExtension.appex in Embed Foundation Extensions */,
+				A9000001233300018 /* NtfyWidget.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -88,6 +99,11 @@
 		A10000012333000F0 /* Schema.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Schema.swift; sourceTree = "<group>"; };
 		A10000012333000F3 /* LockScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockScreenView.swift; sourceTree = "<group>"; };
 		F8D1E1192F0FFCDA0028E66C /* NotificationServiceExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationServiceExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A9000001233300002 /* NtfyWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NtfyWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A9000001233300006 /* NtfyWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NtfyWidget.swift; sourceTree = "<group>"; };
+		A9000001233300007 /* NtfyWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NtfyWidgetBundle.swift; sourceTree = "<group>"; };
+		A9000001233300008 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A9000001233300009 /* NtfyWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NtfyWidget.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -120,6 +136,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A9000001233300011 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -128,6 +151,7 @@
 			children = (
 				A1000001233399993 /* ntfy */,
 				F8D1E11A2F0FFCDB0028E66C /* NotificationServiceExtension */,
+				A9000001233300003 /* NtfyWidget */,
 				F8F170AC2F0FAFE800F0234B /* Frameworks */,
 				A1000001233399992 /* Products */,
 			);
@@ -138,6 +162,7 @@
 			children = (
 				A1000001233300000 /* ntfy.app */,
 				F8D1E1192F0FFCDA0028E66C /* NotificationServiceExtension.appex */,
+				A9000001233300002 /* NtfyWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -206,6 +231,17 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+		A9000001233300003 /* NtfyWidget */ = {
+			isa = PBXGroup;
+			children = (
+				A9000001233300006 /* NtfyWidget.swift */,
+				A9000001233300007 /* NtfyWidgetBundle.swift */,
+				A9000001233300008 /* Info.plist */,
+				A9000001233300009 /* NtfyWidget.entitlements */,
+			);
+			path = NtfyWidget;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -222,6 +258,7 @@
 			);
 			dependencies = (
 				F8D1E11F2F0FFCDB0028E66C /* PBXTargetDependency */,
+				A9000001233300016 /* PBXTargetDependency */,
 			);
 			name = ntfy;
 			productName = ntfy;
@@ -250,6 +287,23 @@
 			productReference = F8D1E1192F0FFCDA0028E66C /* NotificationServiceExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		A9000001233300001 /* NtfyWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A9000001233300015 /* Build configuration list for PBXNativeTarget "NtfyWidget" */;
+			buildPhases = (
+				A9000001233300010 /* Sources */,
+				A9000001233300011 /* Frameworks */,
+				A9000001233300012 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = NtfyWidget;
+			productName = NtfyWidget;
+			productReference = A9000001233300002 /* NtfyWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -265,6 +319,9 @@
 					};
 					F8D1E1182F0FFCDA0028E66C = {
 						CreatedOnToolsVersion = 26.2;
+					};
+					A9000001233300001 = {
+						CreatedOnToolsVersion = 16.0;
 					};
 				};
 			};
@@ -287,6 +344,7 @@
 			targets = (
 				A1000001233399999 /* ntfy */,
 				F8D1E1182F0FFCDA0028E66C /* NotificationServiceExtension */,
+				A9000001233300001 /* NtfyWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -302,6 +360,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		F8D1E1172F0FFCDA0028E66C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A9000001233300012 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -347,6 +412,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A9000001233300010 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A9000001233300004 /* NtfyWidget.swift in Sources */,
+				A9000001233300005 /* NtfyWidgetBundle.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -354,6 +428,11 @@
 			isa = PBXTargetDependency;
 			target = F8D1E1182F0FFCDA0028E66C /* NotificationServiceExtension */;
 			targetProxy = F8D1E11E2F0FFCDB0028E66C /* PBXContainerItemProxy */;
+		};
+		A9000001233300016 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A9000001233300001 /* NtfyWidget */;
+			targetProxy = A9000001233300017 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -549,6 +628,58 @@
 			};
 			name = Release;
 		};
+		A9000001233300013 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = NtfyWidget/NtfyWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J459G9CJT5;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NtfyWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "ntfy+ Widget";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.godsapp.ntfy.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A9000001233300014 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = NtfyWidget/NtfyWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = J459G9CJT5;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = NtfyWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "ntfy+ Widget";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = de.godsapp.ntfy.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		F8D1E1222F0FFCDB0028E66C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -635,6 +766,15 @@
 			buildConfigurations = (
 				F8D1E1222F0FFCDB0028E66C /* Debug */,
 				F8D1E1232F0FFCDB0028E66C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A9000001233300015 /* Build configuration list for PBXNativeTarget "NtfyWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A9000001233300013 /* Debug */,
+				A9000001233300014 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
