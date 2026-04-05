@@ -209,6 +209,39 @@ extension URL {
             result[item.name] = item.value
         }
     }
+
+    /// Parst ablauf-relevante Query-Parameter aus signierten URLs.
+    /// Unterstützt: AWS S3 (Expires/X-Amz-Expires+X-Amz-Date), Azure SAS (se=), generisch (Expires=).
+    var expiryDate: Date? {
+        guard let params = queryParameters else { return nil }
+
+        // 1. Generisches Unix-Timestamp "Expires" (S3 vorgeneriert, ntfy selbst)
+        if let expiresStr = params["Expires"], let ts = TimeInterval(expiresStr) {
+            return Date(timeIntervalSince1970: ts)
+        }
+
+        // 2. AWS Signature v4: X-Amz-Expires (Sekunden) + X-Amz-Date (ISO8601 kompakt)
+        if let amzExpires = params["X-Amz-Expires"],
+           let seconds = TimeInterval(amzExpires),
+           let amzDate = params["X-Amz-Date"] {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
+            formatter.timeZone = TimeZone(identifier: "UTC")
+            if let startDate = formatter.date(from: amzDate) {
+                return startDate.addingTimeInterval(seconds)
+            }
+        }
+
+        // 3. Azure SAS: se= (ISO8601 standard)
+        if let seStr = params["se"] {
+            let formatter = ISO8601DateFormatter()
+            if let date = formatter.date(from: seStr) {
+                return date
+            }
+        }
+
+        return nil
+    }
 }
 
 // MARK: - Binding Extensions
