@@ -70,6 +70,14 @@ final class NotificationService: NSObject {
             content.sound = .defaultCriticalSound(withAudioVolume: 1.0)
         }
 
+        // Custom Sound aus App Group UserDefaults (CUSTOM-01)
+        // Überschreibt nur Standard-Sounds (.default/.low), nicht Critical-Sounds (high/urgent)
+        if let customSoundName = TopicSoundSync.soundName(for: topic),
+           message.priorityLevel != .high,
+           message.priorityLevel != .urgent {
+            content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: customSoundName))
+        }
+
         // Category for actions
         content.categoryIdentifier = "NTFY_MESSAGE"
 
