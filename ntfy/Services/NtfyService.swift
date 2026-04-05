@@ -388,6 +388,8 @@ final class NtfyService {
 
     // MARK: - Network Monitoring
 
+    private var reconnectTask: Task<Void, Never>?
+
     func startNetworkMonitor() {
         pathMonitor = NWPathMonitor()
         pathMonitor?.pathUpdateHandler = { [weak self] path in
@@ -395,7 +397,13 @@ final class NtfyService {
             if path.status == .satisfied {
                 print("🔌 Network: Path restored (\(path.availableInterfaces.map(\.name).joined(separator: ", ")))")
                 Task { @MainActor in
-                    await self.reconnectAll()
+                    // Debounce: vorherigen Reconnect abbrechen, 2s warten
+                    self.reconnectTask?.cancel()
+                    self.reconnectTask = Task {
+                        try? await Task.sleep(for: .seconds(2))
+                        guard !Task.isCancelled else { return }
+                        await self.reconnectAll()
+                    }
                 }
             } else {
                 Task { @MainActor in
