@@ -575,7 +575,6 @@ final class NtfyService {
         }
 
         try? context.save()
-        writeWidgetData(context: context)
     }
 
     // MARK: - Cleanup
@@ -688,6 +687,7 @@ final class NtfyService {
             }
         }
 
+        writeWidgetData(context: context)
         print("✅ Parallel refresh complete")
     }
 

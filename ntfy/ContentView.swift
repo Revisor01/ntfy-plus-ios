@@ -194,6 +194,7 @@ struct ContentView: View {
                 token: token,
                 onMessage: { @MainActor message in
                     ntfyService.storeMessages(for: topicRef, messages: [message], context: context)
+                    ntfyService.writeWidgetData(context: context)
                 },
                 onDelete: { @MainActor deletedMessageId in
                     // Find and delete the message locally when server sends delete event
