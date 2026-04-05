@@ -124,6 +124,10 @@ final class Topic {
     @Attribute var lastMessagePriority: Int = 3
     @Attribute var lastMessageIconURL: String?
 
+    // Phase 5: Notification Customization
+    @Attribute var customSoundName: String? = nil
+    @Attribute var defaultPriority: Int = 3
+
     @Relationship(deleteRule: .cascade, inverse: \StoredMessage.topic)
     var messages: [StoredMessage]?
 
@@ -142,6 +146,8 @@ final class Topic {
         self.lastMessagePreview = nil
         self.lastMessagePriority = 3
         self.lastMessageIconURL = nil
+        self.customSoundName = nil
+        self.defaultPriority = 3
         self.messages = []
     }
 
@@ -155,6 +161,36 @@ final class Topic {
 
     var shouldUseMessageIcon: Bool {
         useMessageIcon ?? true
+    }
+}
+
+// MARK: - Topic Sound Sync (App Group)
+
+/// Schreibt das topic→sound Mapping in App Group UserDefaults,
+/// damit die NotificationServiceExtension Sound-Namen ohne SwiftData-Zugriff lesen kann.
+struct TopicSoundSync {
+    static let suiteName = "group.de.godsapp.ntfy"
+    static let soundDictKey = "topicSoundNames"
+
+    /// Aktualisiert den Sound-Eintrag für einen einzelnen Topic.
+    /// - Parameters:
+    ///   - topicName: Der Topic-Name (z.B. "home-assistant")
+    ///   - soundName: Der UNNotificationSound-Name (nil = Standard-Sound entfernen)
+    static func update(topicName: String, soundName: String?) {
+        guard let defaults = UserDefaults(suiteName: suiteName) else { return }
+        var dict = defaults.dictionary(forKey: soundDictKey) as? [String: String] ?? [:]
+        if let soundName {
+            dict[topicName] = soundName
+        } else {
+            dict.removeValue(forKey: topicName)
+        }
+        defaults.set(dict, forKey: soundDictKey)
+    }
+
+    /// Liest den Sound-Namen für einen Topic aus App Group UserDefaults.
+    static func soundName(for topicName: String) -> String? {
+        UserDefaults(suiteName: suiteName)?
+            .dictionary(forKey: soundDictKey)?[topicName] as? String
     }
 }
 
