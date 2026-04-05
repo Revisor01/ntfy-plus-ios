@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var subscribedTopicIds: Set<String> = []
     @State private var hasInitialized = false
     @State private var isLocked = false
+    @State private var lastBackgroundDate: Date?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
@@ -52,11 +53,20 @@ struct ContentView: View {
             .onChange(of: horizontalSizeClass) { _, newValue in
                 columnVisibility = newValue == .regular ? .all : .detailOnly
             }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+                if AppSettings.biometricLockEnabled {
+                    lastBackgroundDate = Date()
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                 guard hasInitialized else { return }
-                if AppSettings.biometricLockEnabled {
+                // Nur nach >5s im Hintergrund erneut sperren
+                if AppSettings.biometricLockEnabled,
+                   let bg = lastBackgroundDate,
+                   Date().timeIntervalSince(bg) > 5 {
                     isLocked = true
                 }
+                lastBackgroundDate = nil
                 print("📱 didBecomeActiveNotification - refreshing messages")
                 Task {
                     await NotificationService.shared.clearBadge()

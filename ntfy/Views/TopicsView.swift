@@ -153,7 +153,7 @@ struct TopicsView: View {
                 unreadBadge
             }
         }
-        .overlay(alignment: .top) {
+        .safeAreaInset(edge: .top) {
             connectionStatusBanner
         }
         .sheet(item: $topicToEdit) { topic in

@@ -76,27 +76,20 @@ struct SmallWidgetView: View {
     let entry: WidgetEntry
 
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             Image(systemName: "bell.fill")
-                .font(.system(size: 24))
-                .foregroundStyle(.white)
+                .font(.system(size: 22))
+                .foregroundStyle(.blue)
 
             Text("\(entry.messages.count)")
-                .font(.system(size: 36, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
 
             Text("ungelesen")
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(
-            LinearGradient(
-                colors: [Color(hex: "#1E88E5"), Color(hex: "#1565C0")],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
         .widgetURL(URL(string: "ntfy://"))
     }
 }
@@ -107,53 +100,34 @@ struct MediumWidgetView: View {
     let entry: WidgetEntry
 
     private var displayMessages: [WidgetMessage] {
-        Array(entry.messages.prefix(4))
+        Array(entry.messages.prefix(3))
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                Image(systemName: "bell.fill")
-                    .font(.caption2)
-                    .foregroundStyle(.blue)
-                Text("ntfy+")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.blue)
-                Spacer()
-                Text("\(entry.messages.count) ungelesen")
-                    .font(.caption2)
+        if displayMessages.isEmpty {
+            VStack(spacing: 8) {
+                Image(systemName: "bell.slash")
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+                Text("Keine ungelesenen Nachrichten")
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 12)
-            .padding(.top, 10)
-            .padding(.bottom, 6)
-
-            if displayMessages.isEmpty {
-                Spacer()
-                HStack {
-                    Spacer()
-                    Text("Keine ungelesenen Nachrichten")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-                Spacer()
-            } else {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(displayMessages) { msg in
-                        Link(destination: msg.deepLinkURL) {
-                            MessageRowView(message: msg)
-                        }
-                        if msg.id != displayMessages.last?.id {
-                            Divider()
-                                .padding(.leading, 12)
-                        }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(displayMessages) { msg in
+                    Link(destination: msg.deepLinkURL) {
+                        MessageRowView(message: msg)
+                    }
+                    if msg.id != displayMessages.last?.id {
+                        Divider()
+                            .padding(.leading, 16)
                     }
                 }
+                Spacer(minLength: 0)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
@@ -195,8 +169,8 @@ struct MessageRowView: View {
                     .lineLimit(1)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 5)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 6)
         .contentShape(Rectangle())
     }
 
