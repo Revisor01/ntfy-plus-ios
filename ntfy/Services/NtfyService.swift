@@ -2,6 +2,7 @@ import Foundation
 import Network
 import Observation
 import SwiftData
+import WidgetKit
 
 enum NtfyError: LocalizedError {
     case invalidURL
@@ -560,6 +561,7 @@ final class NtfyService {
         }
 
         try? context.save()
+        writeWidgetData(context: context)
     }
 
     // MARK: - Cleanup
@@ -699,5 +701,49 @@ final class NtfyService {
         }
 
         return httpResponse.statusCode == 200
+    }
+
+    // MARK: - Widget Data
+
+    /// Schreibt die letzten 10 ungelesenen Nachrichten aller Topics als JSON
+    /// in den App Group Container, damit das WidgetKit-Extension sie lesen kann.
+    /// Wird nach jedem storeMessages()-Aufruf aufgerufen.
+    func writeWidgetData(context: ModelContext) {
+        guard let containerURL = FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: "group.de.godsapp.ntfy"
+        ) else {
+            print("❌ Widget: App Group Container nicht erreichbar")
+            return
+        }
+
+        let fileURL = containerURL.appendingPathComponent("widget_data.json")
+
+        // Alle ungelesenen StoredMessages laden, nach Zeit absteigend, max 10
+        var descriptor = FetchDescriptor<StoredMessage>(
+            predicate: #Predicate<StoredMessage> { !$0.isRead },
+            sortBy: [SortDescriptor(\.time, order: .reverse)]
+        )
+        descriptor.fetchLimit = 10
+
+        let messages = (try? context.fetch(descriptor)) ?? []
+
+        let entries: [[String: Any]] = messages.compactMap { msg in
+            guard let topic = msg.topic else { return nil }
+            return [
+                "messageId": msg.messageId,
+                "topic": topic.name,
+                "title": msg.title ?? "",
+                "message": msg.message ?? "",
+                "time": msg.time,
+                "priority": msg.priority
+            ]
+        }
+
+        guard let data = try? JSONSerialization.data(withJSONObject: entries) else { return }
+        try? data.write(to: fileURL, options: .atomic)
+
+        // Widget-Timeline invalidieren
+        WidgetCenter.shared.reloadAllTimelines()
+        print("✅ Widget: \(entries.count) ungelesene Nachrichten in widget_data.json geschrieben")
     }
 }
