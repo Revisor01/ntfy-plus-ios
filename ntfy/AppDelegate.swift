@@ -139,6 +139,17 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
                 }
             }
 
+        case "OPEN_URL":
+            // URL aus userInfo["url"] lesen (ntfy action-spezifisches Feld)
+            // Fallback auf userInfo["click"] falls kein "url"-Key vorhanden
+            let urlString = (userInfo["url"] as? String) ?? (userInfo["click"] as? String)
+            if let urlString = urlString, let url = URL(string: urlString) {
+                print("🔗 OPEN_URL action: \(urlString)")
+                Task { @MainActor in
+                    UIApplication.shared.open(url)
+                }
+            }
+
         default:
             // Normal tap (UNNotificationDefaultActionIdentifier) — open app and navigate
             // Handle click URL if present (ntfy v2.16+)
