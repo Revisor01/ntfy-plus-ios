@@ -25,6 +25,7 @@ enum NtfySchemaV2: VersionedSchema {
 // MARK: - Schema V3
 // Erweitert V2 mit isStarred: Bool = false auf StoredMessage (Phase 4: Star Feature).
 // Lightweight Migration — kein Custom-Code nötig da Default-Wert false.
+// Eingefroren als Baseline vor Phase 5.
 
 enum NtfySchemaV3: VersionedSchema {
     nonisolated(unsafe) static var versionIdentifier = Schema.Version(3, 0, 0)
@@ -33,11 +34,22 @@ enum NtfySchemaV3: VersionedSchema {
     }
 }
 
+// MARK: - Schema V4
+// Erweitert V3 mit customSoundName: String? und defaultPriority: Int = 3 auf Topic (Phase 5: Notification Customization).
+// Lightweight Migration — kein Custom-Code nötig da Optional/Default-Werte.
+
+enum NtfySchemaV4: VersionedSchema {
+    nonisolated(unsafe) static var versionIdentifier = Schema.Version(4, 0, 0)
+    static var models: [any PersistentModel.Type] {
+        [Topic.self, StoredMessage.self, Server.self, DeletedMessage.self]
+    }
+}
+
 // MARK: - Migration Plan
 
 enum NtfyMigrationPlan: SchemaMigrationPlan {
-    static var schemas: [any VersionedSchema.Type] { [NtfySchemaV1.self, NtfySchemaV2.self, NtfySchemaV3.self] }
-    static var stages: [MigrationStage] { [migrateV1toV2, migrateV2toV3] }
+    static var schemas: [any VersionedSchema.Type] { [NtfySchemaV1.self, NtfySchemaV2.self, NtfySchemaV3.self, NtfySchemaV4.self] }
+    static var stages: [MigrationStage] { [migrateV1toV2, migrateV2toV3, migrateV3toV4] }
 
     static let migrateV1toV2 = MigrationStage.custom(
         fromVersion: NtfySchemaV1.self,
@@ -69,5 +81,10 @@ enum NtfyMigrationPlan: SchemaMigrationPlan {
     static let migrateV2toV3 = MigrationStage.lightweight(
         fromVersion: NtfySchemaV2.self,
         toVersion: NtfySchemaV3.self
+    )
+
+    static let migrateV3toV4 = MigrationStage.lightweight(
+        fromVersion: NtfySchemaV3.self,
+        toVersion: NtfySchemaV4.self
     )
 }
