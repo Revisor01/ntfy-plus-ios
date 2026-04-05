@@ -79,6 +79,7 @@ struct MessagesView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
+                    hapticFeedback(.light)
                     showOnlyStarred.toggle()
                 } label: {
                     Image(systemName: showOnlyStarred ? "star.fill" : "star")
@@ -160,6 +161,7 @@ struct MessagesView: View {
                     }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
+                            hapticFeedback(.medium)
                             deleteMessage(message)
                         } label: {
                             Label("Löschen", systemImage: AppIcons.delete)
@@ -167,6 +169,7 @@ struct MessagesView: View {
                     }
                     .swipeActions(edge: .leading) {
                         Button {
+                            hapticFeedback(.medium)
                             toggleRead(message)
                         } label: {
                             Label(
