@@ -389,27 +389,33 @@ final class NtfyService {
     // MARK: - Network Monitoring
 
     private var reconnectTask: Task<Void, Never>?
+    nonisolated(unsafe) private var lastPathSatisfied = true
 
     func startNetworkMonitor() {
         pathMonitor = NWPathMonitor()
         pathMonitor?.pathUpdateHandler = { [weak self] path in
             guard let self else { return }
-            if path.status == .satisfied {
+            let isSatisfied = path.status == .satisfied
+
+            if isSatisfied && !lastPathSatisfied {
+                // Nur reconnecten wenn vorher NICHT satisfied war (echte Wiederherstellung)
+                lastPathSatisfied = true
                 print("🔌 Network: Path restored (\(path.availableInterfaces.map(\.name).joined(separator: ", ")))")
                 Task { @MainActor in
-                    // Debounce: vorherigen Reconnect abbrechen, 2s warten
                     self.reconnectTask?.cancel()
                     self.reconnectTask = Task {
-                        try? await Task.sleep(for: .seconds(2))
+                        try? await Task.sleep(for: .seconds(3))
                         guard !Task.isCancelled else { return }
                         await self.reconnectAll()
                     }
                 }
-            } else {
+            } else if !isSatisfied {
+                lastPathSatisfied = false
                 Task { @MainActor in
                     self.connectionStatus = .disconnected
                 }
             }
+            // Wenn satisfied UND vorher auch satisfied → ignorieren (kein Reconnect)
         }
         pathMonitor?.start(queue: monitorQueue)
     }

@@ -18,8 +18,9 @@ struct ContentView: View {
     @State private var navigationPath = NavigationPath()
     @State private var subscribedTopicIds: Set<String> = []
     @State private var hasInitialized = false
-    @State private var isLocked = false
+    @State private var isLocked = AppSettings.biometricLockEnabled
     @State private var lastBackgroundDate: Date?
+    @State private var hasEnteredBackground = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
@@ -31,9 +32,6 @@ struct ContentView: View {
                 handleDeepLink(url)
             }
             .onAppear {
-                if AppSettings.biometricLockEnabled {
-                    isLocked = true
-                }
                 columnVisibility = horizontalSizeClass == .regular ? .all : .detailOnly
                 requestNotificationPermission()
                 if !hasInitialized {
@@ -54,19 +52,14 @@ struct ContentView: View {
                 columnVisibility = newValue == .regular ? .all : .detailOnly
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
-                if AppSettings.biometricLockEnabled {
-                    lastBackgroundDate = Date()
-                }
+                hasEnteredBackground = true
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
                 guard hasInitialized else { return }
-                // Nur nach >5s im Hintergrund erneut sperren
-                if AppSettings.biometricLockEnabled,
-                   let bg = lastBackgroundDate,
-                   Date().timeIntervalSince(bg) > 5 {
+                if AppSettings.biometricLockEnabled && hasEnteredBackground {
                     isLocked = true
                 }
-                lastBackgroundDate = nil
+                hasEnteredBackground = false
                 print("📱 didBecomeActiveNotification - refreshing messages")
                 Task {
                     await NotificationService.shared.clearBadge()
