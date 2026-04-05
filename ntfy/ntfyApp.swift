@@ -53,7 +53,7 @@ struct ntfyApp: App {
 
     private func retryModelContainer() {
         do {
-            let schema = Schema(NtfySchemaV4.models)
+            let schema = Schema(NtfySchema.models)
             let modelConfiguration = ModelConfiguration(
                 schema: schema,
                 isStoredInMemoryOnly: false,
@@ -61,7 +61,6 @@ struct ntfyApp: App {
             )
             modelContainer = try ModelContainer(
                 for: schema,
-                migrationPlan: NtfyMigrationPlan.self,
                 configurations: [modelConfiguration]
             )
             containerInitError = nil
