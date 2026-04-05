@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var defaultServerURL = AppSettings.defaultServerURL
     @State private var selectedTheme = AppSettings.appTheme
     @State private var hapticFeedback = AppSettings.hapticFeedback
+    @State private var biometricLockEnabled = AppSettings.biometricLockEnabled
     @State private var notificationsEnabled = AppSettings.notificationsEnabled
 
     @State private var retentionDays = AppSettings.messageRetentionDays
@@ -86,6 +87,11 @@ struct SettingsView: View {
                     Toggle("Haptisches Feedback", isOn: $hapticFeedback)
                         .onChange(of: hapticFeedback) { _, newValue in
                             AppSettings.hapticFeedback = newValue
+                        }
+
+                    Toggle("App mit Face ID sperren", isOn: $biometricLockEnabled)
+                        .onChange(of: biometricLockEnabled) { _, newValue in
+                            AppSettings.biometricLockEnabled = newValue
                         }
                 } header: {
                     Text("Darstellung")

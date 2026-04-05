@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import UIKit
+import LocalAuthentication
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
@@ -15,6 +16,7 @@ struct ContentView: View {
     @State private var navigationPath = NavigationPath()
     @State private var subscribedTopicIds: Set<String> = []
     @State private var hasInitialized = false
+    @State private var isLocked = false
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
@@ -25,7 +27,19 @@ struct ContentView: View {
                 mainContent
             }
         }
+        .overlay {
+            if isLocked {
+                LockScreenView {
+                    isLocked = false
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: isLocked)
         .onAppear {
+            if AppSettings.biometricLockEnabled {
+                isLocked = true
+            }
             requestNotificationPermission()
             if !hasInitialized {
                 hasInitialized = true
@@ -43,6 +57,9 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
             guard hasInitialized else { return }
+            if AppSettings.biometricLockEnabled {
+                isLocked = true
+            }
             print("📱 didBecomeActiveNotification - refreshing messages")
             Task {
                 await NotificationService.shared.clearBadge()
