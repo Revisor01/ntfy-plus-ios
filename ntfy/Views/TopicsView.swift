@@ -141,13 +141,13 @@ struct TopicsView: View {
             }
 
             ToolbarItem(placement: .topBarLeading) {
-                HStack(spacing: 8) {
-                    Button {
-                        showingSettings = true
-                    } label: {
-                        Image(systemName: AppIcons.settings)
-                    }
-                    toolbarConnectionIndicator
+                Button {
+                    showingSettings = true
+                } label: {
+                    Image(systemName: AppIcons.settings)
+                        .overlay(alignment: .topTrailing) {
+                            connectionDot
+                        }
                 }
             }
         }
@@ -175,24 +175,20 @@ struct TopicsView: View {
     }
 
     @ViewBuilder
-    private var toolbarConnectionIndicator: some View {
+    private var connectionDot: some View {
         switch ntfyService.connectionStatus {
         case .connected:
             EmptyView()
-        case .connecting:
-            Image(systemName: "antenna.radiowaves.left.and.right")
-                .font(.caption)
-                .foregroundStyle(.orange)
-                .symbolEffect(.pulse)
+        case .connecting, .reconnecting:
+            Circle()
+                .fill(.orange)
+                .frame(width: 8, height: 8)
+                .offset(x: 2, y: -2)
         case .disconnected:
-            Image(systemName: "wifi.slash")
-                .font(.caption)
-                .foregroundStyle(.red)
-        case .reconnecting:
-            Image(systemName: "arrow.clockwise")
-                .font(.caption)
-                .foregroundStyle(.orange)
-                .symbolEffect(.rotate)
+            Circle()
+                .fill(.red)
+                .frame(width: 8, height: 8)
+                .offset(x: 2, y: -2)
         }
     }
 
