@@ -40,6 +40,14 @@ struct TopicsView: View {
                 ForEach(filteredTopics) { topic in
                     TopicRow(topic: topic)
                         .tag(topic)
+                        .listRowBackground(
+                            selectedTopic?.id == topic.id
+                            ? HStack(spacing: 0) {
+                                Rectangle().fill(.purple).frame(width: 3)
+                                Color.purple.opacity(0.1)
+                              }.clipShape(RoundedRectangle(cornerRadius: 8))
+                            : nil
+                        )
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 deleteTopic(topic)
