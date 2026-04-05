@@ -9,10 +9,22 @@ struct EditTopicView: View {
     @State private var customLetter: String
     @State private var selectedIcon: String?
     @State private var useMessageIcon: Bool
+    @State private var selectedSoundName: String?
+    @State private var selectedDefaultPriority: Int
 
     private let availableColors: [Color] = [
         .red, .orange, .yellow, .green, .mint, .teal,
         .cyan, .blue, .indigo, .purple, .pink, .brown
+    ]
+
+    private let availableSounds: [(name: String, displayName: String)] = [
+        ("Tritone", "Tritone"),
+        ("Chime", "Chime"),
+        ("Glass", "Glass"),
+        ("Horn", "Horn"),
+        ("Electronic", "Electronic"),
+        ("Bell", "Bell"),
+        ("Xylophone", "Xylophone"),
     ]
 
     private let availableIcons: [String] = [
@@ -36,6 +48,8 @@ struct EditTopicView: View {
         _customLetter = State(initialValue: topic.customLetter ?? "")
         _selectedIcon = State(initialValue: topic.iconName)
         _useMessageIcon = State(initialValue: topic.shouldUseMessageIcon)
+        _selectedSoundName = State(initialValue: topic.customSoundName)
+        _selectedDefaultPriority = State(initialValue: topic.defaultPriority)
     }
 
     var body: some View {
@@ -136,6 +150,28 @@ struct EditTopicView: View {
                     }
                     .padding(.vertical, 8)
                 }
+
+                // MARK: - Benachrichtigungen Section
+                Section("Benachrichtigungen") {
+                    // Standard-Priorität Picker
+                    Picker("Standard-Priorität", selection: $selectedDefaultPriority) {
+                        ForEach(Priority.allCases, id: \.rawValue) { priority in
+                            Label(priority.name, systemImage: priority.icon)
+                                .tag(priority.rawValue)
+                        }
+                    }
+
+                    // Sound Picker
+                    Picker("Benachrichtigungston", selection: $selectedSoundName) {
+                        Text("Standard").tag(Optional<String>.none)
+                        ForEach(availableSounds, id: \.name) { sound in
+                            Text(sound.displayName).tag(Optional(sound.name))
+                        }
+                    }
+                } footer: {
+                    Text("Standard-Priorität wird für neue Nachrichten dieses Topics vorbelegt. Der Ton gilt nur für App-interne Benachrichtigungen (SSE).")
+                        .font(.caption)
+                }
             }
             .navigationTitle("Topic anpassen")
             .navigationBarTitleDisplayMode(.inline)
@@ -192,6 +228,9 @@ struct EditTopicView: View {
         topic.customLetter = customLetter.isEmpty ? nil : customLetter
         topic.iconName = selectedIcon
         topic.useMessageIcon = useMessageIcon
+        topic.customSoundName = selectedSoundName
+        topic.defaultPriority = selectedDefaultPriority
+        TopicSoundSync.update(topicName: topic.name, soundName: selectedSoundName)
     }
 }
 
