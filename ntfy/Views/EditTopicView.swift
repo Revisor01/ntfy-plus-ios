@@ -55,123 +55,8 @@ struct EditTopicView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Preview
-                Section {
-                    HStack {
-                        Spacer()
-                        topicPreview
-                        Spacer()
-                    }
-                    .listRowBackground(Color.clear)
-                }
-
-                // Message Icon Toggle
-                Section {
-                    Toggle("Icon aus Nachricht verwenden", isOn: $useMessageIcon)
-                } footer: {
-                    Text("Wenn aktiviert, wird das Icon der letzten Nachricht (z.B. Sonarr-Logo) angezeigt, falls vorhanden.")
-                }
-
-                // Custom Letter
-                Section("Buchstabe") {
-                    TextField("Buchstabe (leer = erster Buchstabe)", text: $customLetter)
-                        .textInputAutocapitalization(.characters)
-                        .onChange(of: customLetter) { _, newValue in
-                            if newValue.count > 2 {
-                                customLetter = String(newValue.prefix(2))
-                            }
-                        }
-                }
-
-                // Color Selection
-                Section("Farbe") {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
-                        ForEach(availableColors, id: \.self) { color in
-                            Circle()
-                                .fill(color.gradient)
-                                .frame(width: 44, height: 44)
-                                .overlay {
-                                    if colorMatches(color) {
-                                        Image(systemName: "checkmark")
-                                            .font(.headline)
-                                            .foregroundStyle(.white)
-                                    }
-                                }
-                                .onTapGesture {
-                                    selectedColor = color
-                                    selectedIcon = nil
-                                }
-                        }
-                    }
-                    .padding(.vertical, 8)
-                }
-
-                // Icon Selection
-                Section("Icon (optional)") {
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
-                        // No icon option
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(Color.secondary.opacity(0.2))
-                                .frame(width: 44, height: 44)
-
-                            Image(systemName: "xmark")
-                                .foregroundStyle(.secondary)
-                        }
-                        .overlay {
-                            if selectedIcon == nil {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(selectedColor, lineWidth: 2)
-                            }
-                        }
-                        .onTapGesture {
-                            selectedIcon = nil
-                        }
-
-                        ForEach(availableIcons, id: \.self) { icon in
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(selectedColor.gradient)
-                                    .frame(width: 44, height: 44)
-
-                                Image(systemName: icon)
-                                    .foregroundStyle(.white)
-                            }
-                            .overlay {
-                                if selectedIcon == icon {
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(.white, lineWidth: 2)
-                                }
-                            }
-                            .onTapGesture {
-                                selectedIcon = icon
-                            }
-                        }
-                    }
-                    .padding(.vertical, 8)
-                }
-
-                // MARK: - Benachrichtigungen Section
-                Section("Benachrichtigungen") {
-                    // Standard-Priorität Picker
-                    Picker("Standard-Priorität", selection: $selectedDefaultPriority) {
-                        ForEach(Priority.allCases, id: \.rawValue) { priority in
-                            Label(priority.name, systemImage: priority.icon)
-                                .tag(priority.rawValue)
-                        }
-                    }
-
-                    // Sound Picker
-                    Picker("Benachrichtigungston", selection: $selectedSoundName) {
-                        Text("Standard").tag(Optional<String>.none)
-                        ForEach(availableSounds, id: \.name) { sound in
-                            Text(sound.displayName).tag(Optional(sound.name))
-                        }
-                    }
-                } footer: {
-                    Text("Standard-Priorität wird für neue Nachrichten dieses Topics vorbelegt.")
-                        .font(.caption)
-                }
+                formTopSections
+                formBottomSections
             }
             .navigationTitle("Topic anpassen")
             .navigationBarTitleDisplayMode(.inline)
@@ -189,6 +74,142 @@ struct EditTopicView: View {
                     }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var formTopSections: some View {
+        // Preview
+        Section {
+            HStack {
+                Spacer()
+                topicPreview
+                Spacer()
+            }
+            .listRowBackground(Color.clear)
+        }
+
+        // Message Icon Toggle
+        Section {
+            Toggle("Icon aus Nachricht verwenden", isOn: $useMessageIcon)
+        } footer: {
+            Text("Wenn aktiviert, wird das Icon der letzten Nachricht (z.B. Sonarr-Logo) angezeigt, falls vorhanden.")
+        }
+
+        // Custom Letter
+        Section("Buchstabe") {
+            TextField("Buchstabe (leer = erster Buchstabe)", text: $customLetter)
+                .textInputAutocapitalization(.characters)
+                .onChange(of: customLetter) { _, newValue in
+                    if newValue.count > 2 {
+                        customLetter = String(newValue.prefix(2))
+                    }
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var formBottomSections: some View {
+        colorSection
+        iconSection
+        notificationsSection
+    }
+
+    @ViewBuilder
+    private var colorSection: some View {
+        Section("Farbe") {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
+                ForEach(availableColors, id: \.self) { color in
+                    Circle()
+                        .fill(color.gradient)
+                        .frame(width: 44, height: 44)
+                        .overlay {
+                            if colorMatches(color) {
+                                Image(systemName: "checkmark")
+                                    .font(.headline)
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                        .onTapGesture {
+                            selectedColor = color
+                            selectedIcon = nil
+                        }
+                }
+            }
+            .padding(.vertical, 8)
+        }
+    }
+
+    @ViewBuilder
+    private var iconSection: some View {
+        Section("Icon (optional)") {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
+                // No icon option
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.secondary.opacity(0.2))
+                        .frame(width: 44, height: 44)
+
+                    Image(systemName: "xmark")
+                        .foregroundStyle(.secondary)
+                }
+                .overlay {
+                    if selectedIcon == nil {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(selectedColor, lineWidth: 2)
+                    }
+                }
+                .onTapGesture {
+                    selectedIcon = nil
+                }
+
+                ForEach(availableIcons, id: \.self) { icon in
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(selectedColor.gradient)
+                            .frame(width: 44, height: 44)
+
+                        Image(systemName: icon)
+                            .foregroundStyle(.white)
+                    }
+                    .overlay {
+                        if selectedIcon == icon {
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(.white, lineWidth: 2)
+                        }
+                    }
+                    .onTapGesture {
+                        selectedIcon = icon
+                    }
+                }
+            }
+            .padding(.vertical, 8)
+        }
+    }
+
+    @ViewBuilder
+    private var notificationsSection: some View {
+        Section {
+            // Standard-Priorität Picker
+            Picker("Standard-Priorität", selection: $selectedDefaultPriority) {
+                ForEach(Priority.allCases, id: \.rawValue) { priority in
+                    Label(priority.name, systemImage: priority.icon)
+                        .tag(priority.rawValue)
+                }
+            }
+
+            // Sound Picker
+            Picker("Benachrichtigungston", selection: $selectedSoundName) {
+                Text("Standard").tag(Optional<String>.none)
+                ForEach(availableSounds, id: \.name) { sound in
+                    Text(sound.displayName).tag(Optional(sound.name))
+                }
+            }
+        } header: {
+            Text("Benachrichtigungen")
+        } footer: {
+            Text("Standard-Priorität wird für neue Nachrichten dieses Topics vorbelegt.")
+                .font(.caption)
         }
     }
 
