@@ -26,6 +26,9 @@ struct ContentView: View {
         rootContent
             .overlay { lockOverlay }
             .animation(.easeInOut(duration: 0.2), value: isLocked)
+            .onOpenURL { url in
+                handleDeepLink(url)
+            }
             .onAppear {
                 if AppSettings.biometricLockEnabled {
                     isLocked = true
@@ -133,6 +136,28 @@ struct ContentView: View {
         Task {
             _ = await NotificationService.shared.requestAuthorization()
         }
+    }
+
+    // MARK: - Deep Link
+
+    private func handleDeepLink(_ url: URL) {
+        // Format: ntfy://topic/{topicName}
+        guard url.scheme == "ntfy",
+              url.host == "topic",
+              !url.pathComponents.isEmpty else { return }
+
+        // pathComponents[0] ist "/", pathComponents[1] ist der Topic-Name
+        let components = url.pathComponents.filter { $0 != "/" }
+        guard let topicName = components.first else { return }
+
+        // Onboarding abgeschlossen und Topic vorhanden?
+        guard hasCompletedOnboarding, !servers.isEmpty else { return }
+
+        // Lock aufheben falls aktiv — Widget-Tap soll direkt navigieren
+        if isLocked { isLocked = false }
+
+        selectedTopic = topics.first { $0.name == topicName }
+        print("🔗 Deep Link: navigiere zu Topic '\(topicName)'")
     }
 
     /// Fetch missed messages for all topics (called when app becomes active)
