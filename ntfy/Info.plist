@@ -21,6 +21,8 @@
 	<array>
 		<string>de.godsapp.ntfy.refresh</string>
 	</array>
+	<key>NSFaceIDUsageDescription</key>
+	<string>ntfy+ verwendet Face ID um den App-Inhalt zu schützen.</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
