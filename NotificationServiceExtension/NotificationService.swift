@@ -40,6 +40,11 @@ class NotificationService: UNNotificationServiceExtension {
             // Clear subtitle (this removes the topic)
             bestAttemptContent.subtitle = ""
 
+            // Thread identifier für Topic-Gruppierung (GROUP-01)
+            if let topic = request.content.userInfo["topic"] as? String, !topic.isEmpty {
+                bestAttemptContent.threadIdentifier = topic
+            }
+
             // Increment badge count
             let newBadge = getBadgeCount() + 1
             setBadgeCount(newBadge)
