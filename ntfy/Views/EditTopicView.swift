@@ -169,7 +169,7 @@ struct EditTopicView: View {
                         }
                     }
                 } footer: {
-                    Text("Standard-Priorität wird für neue Nachrichten dieses Topics vorbelegt. Der Ton gilt nur für App-interne Benachrichtigungen (SSE).")
+                    Text("Standard-Priorität wird für neue Nachrichten dieses Topics vorbelegt.")
                         .font(.caption)
                 }
             }
