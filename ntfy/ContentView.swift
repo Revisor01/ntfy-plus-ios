@@ -51,16 +51,16 @@ struct ContentView: View {
             .onChange(of: horizontalSizeClass) { _, newValue in
                 columnVisibility = newValue == .regular ? .all : .detailOnly
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
                 hasEnteredBackground = true
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                 guard hasInitialized else { return }
                 if AppSettings.biometricLockEnabled && hasEnteredBackground {
                     isLocked = true
                 }
                 hasEnteredBackground = false
-                print("📱 didBecomeActiveNotification - refreshing messages")
+                print("📱 willEnterForeground - refreshing messages")
                 Task {
                     await NotificationService.shared.clearBadge()
                     await refreshAllTopics()
