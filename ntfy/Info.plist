@@ -30,5 +30,16 @@
 		<key>UIImageName</key>
 		<string></string>
 	</dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ntfy</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>de.godsapp.ntfy</string>
+		</dict>
+	</array>
 </dict>
 </plist>
