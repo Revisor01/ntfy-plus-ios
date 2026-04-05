@@ -239,39 +239,90 @@ struct MessageRow: View {
     @ViewBuilder
     private func attachmentView(attachment: StoredAttachment, url: String) -> some View {
         if attachment.isImage {
-            // Image attachment - show inline
-            AsyncImage(url: URL(string: url)) { phase in
-                switch phase {
-                case .empty:
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.secondary.opacity(0.1))
-                        .frame(height: 150)
-                        .overlay {
-                            ProgressView()
-                        }
-                case .success(let image):
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxHeight: 250)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .overlay {
+            // Expiry-Check: vor dem Laden prüfen ob URL schon abgelaufen
+            if let expiry = URL(string: url)?.expiryDate, expiry < Date() {
+                expiredAttachmentPlaceholder
+            } else {
+                // Image attachment - show inline
+                VStack(alignment: .leading, spacing: 0) {
+                    AsyncImage(url: URL(string: url)) { phase in
+                        switch phase {
+                        case .empty:
                             RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                                .fill(Color.secondary.opacity(0.1))
+                                .frame(height: 150)
+                                .overlay {
+                                    ProgressView()
+                                }
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(maxHeight: 250)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                                }
+                                .onTapGesture {
+                                    openURL(url)
+                                }
+                        case .failure:
+                            attachmentFileRow(attachment: attachment, url: url, icon: "photo", color: AppColors.primary)
+                        @unknown default:
+                            EmptyView()
                         }
-                        .onTapGesture {
-                            openURL(url)
-                        }
-                case .failure:
-                    attachmentFileRow(attachment: attachment, url: url, icon: "photo", color: AppColors.primary)
-                @unknown default:
-                    EmptyView()
+                    }
+                    // Expiry-Indikator unter dem Bild (nur wenn URL noch nicht abgelaufen)
+                    if let expiry = URL(string: url)?.expiryDate, expiry > Date() {
+                        Text(expiryLabel(expiry))
+                            .font(AppFonts.caption)
+                            .foregroundStyle(.orange)
+                            .padding(.top, AppSpacing.xxs)
+                    }
                 }
             }
         } else {
             // Non-image attachment - show as downloadable file
             let icon = iconForFileType(attachment.type)
             attachmentFileRow(attachment: attachment, url: url, icon: icon.0, color: icon.1)
+        }
+    }
+
+    @ViewBuilder
+    private var expiredAttachmentPlaceholder: some View {
+        HStack(spacing: AppSpacing.sm) {
+            Image(systemName: "clock.badge.xmark")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Anhang abgelaufen")
+                    .font(AppFonts.subheadline)
+                    .foregroundStyle(.secondary)
+                Text("Die Download-URL ist nicht mehr gültig.")
+                    .font(AppFonts.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            Spacer()
+        }
+        .padding(AppSpacing.sm)
+        .background(Color.secondary.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func expiryLabel(_ expiry: Date) -> String {
+        let remaining = expiry.timeIntervalSinceNow
+        if remaining < 60 {
+            return "Läuft gleich ab"
+        } else if remaining < 3600 {
+            let minutes = Int(remaining / 60)
+            return "Läuft ab in \(minutes) Min."
+        } else if remaining < 86400 {
+            let hours = Int(remaining / 3600)
+            return "Läuft ab in \(hours) Std."
+        } else {
+            let days = Int(remaining / 86400)
+            return "Läuft ab in \(days) Tag\(days == 1 ? "" : "en")"
         }
     }
 
