@@ -495,6 +495,11 @@ struct AppSettings {
         set { defaults.set(newValue, forKey: "hapticFeedback") }
     }
 
+    static var biometricLockEnabled: Bool {
+        get { defaults.bool(forKey: "biometricLockEnabled") }
+        set { defaults.set(newValue, forKey: "biometricLockEnabled") }
+    }
+
     static var appTheme: AppTheme {
         get {
             guard let raw = defaults.string(forKey: "appTheme"),
