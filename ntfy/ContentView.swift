@@ -9,6 +9,8 @@ struct ContentView: View {
     @Query(sort: \Topic.lastMessageAt, order: .reverse) private var topics: [Topic]
     @Query private var servers: [Server]
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     @State private var selectedTopic: Topic?
     @State private var showingAddTopic = false
     @State private var showingSettings = false
@@ -17,65 +19,77 @@ struct ContentView: View {
     @State private var subscribedTopicIds: Set<String> = []
     @State private var hasInitialized = false
     @State private var isLocked = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     var body: some View {
-        Group {
-            if !hasCompletedOnboarding || servers.isEmpty {
-                OnboardingView(isOnboardingComplete: $hasCompletedOnboarding)
-            } else {
-                mainContent
-            }
-        }
-        .overlay {
-            if isLocked {
-                LockScreenView {
-                    isLocked = false
+        rootContent
+            .overlay { lockOverlay }
+            .animation(.easeInOut(duration: 0.2), value: isLocked)
+            .onAppear {
+                if AppSettings.biometricLockEnabled {
+                    isLocked = true
                 }
-                .transition(.opacity)
+                columnVisibility = horizontalSizeClass == .regular ? .all : .detailOnly
+                requestNotificationPermission()
+                if !hasInitialized {
+                    hasInitialized = true
+                    Task {
+                        print("📱 Initial load - fetching messages")
+                        await refreshAllTopics()
+                        await subscribeToAllTopics()
+                    }
+                }
             }
-        }
-        .animation(.easeInOut(duration: 0.2), value: isLocked)
-        .onAppear {
-            if AppSettings.biometricLockEnabled {
-                isLocked = true
-            }
-            requestNotificationPermission()
-            if !hasInitialized {
-                hasInitialized = true
+            .onChange(of: topics.count) {
                 Task {
-                    print("📱 Initial load - fetching messages")
-                    await refreshAllTopics()
                     await subscribeToAllTopics()
                 }
             }
+            .onChange(of: horizontalSizeClass) { _, newValue in
+                columnVisibility = newValue == .regular ? .all : .detailOnly
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                guard hasInitialized else { return }
+                if AppSettings.biometricLockEnabled {
+                    isLocked = true
+                }
+                print("📱 didBecomeActiveNotification - refreshing messages")
+                Task {
+                    await NotificationService.shared.clearBadge()
+                    await refreshAllTopics()
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var rootContent: some View {
+        if !hasCompletedOnboarding || servers.isEmpty {
+            OnboardingView(isOnboardingComplete: $hasCompletedOnboarding)
+        } else {
+            mainContent
         }
-        .onChange(of: topics.count) {
-            Task {
-                await subscribeToAllTopics()
+    }
+
+    @ViewBuilder
+    private var lockOverlay: some View {
+        if isLocked {
+            LockScreenView {
+                isLocked = false
             }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-            guard hasInitialized else { return }
-            if AppSettings.biometricLockEnabled {
-                isLocked = true
-            }
-            print("📱 didBecomeActiveNotification - refreshing messages")
-            Task {
-                await NotificationService.shared.clearBadge()
-                await refreshAllTopics()
-            }
+            .transition(.opacity)
         }
     }
 
     private var mainContent: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
             TopicsView(
                 selectedTopic: $selectedTopic,
                 showingAddTopic: $showingAddTopic,
                 showingSettings: $showingSettings,
                 showingPublish: $showingPublish
             )
+            .navigationSplitViewColumnWidth(min: 260, ideal: 300)
         } detail: {
             if let topic = selectedTopic {
                 MessagesView(topic: topic)
@@ -83,6 +97,7 @@ struct ContentView: View {
                 EmptyStateView()
             }
         }
+        .navigationSplitViewStyle(.balanced)
         .sheet(isPresented: $showingAddTopic) {
             AddTopicView()
         }

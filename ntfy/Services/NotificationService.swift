@@ -194,8 +194,9 @@ final class NotificationService: NSObject {
             identifier: "NTFY_MESSAGE",
             actions: [markReadAction, openURLAction, replyAction],
             intentIdentifiers: [],
-            options: [.customDismissAction],
-            categorySummaryFormat: "%u weitere Nachrichten"
+            hiddenPreviewsBodyPlaceholder: "Neue Nachricht",
+            categorySummaryFormat: "%u weitere Nachrichten",
+            options: [.customDismissAction]
         )
 
         center.setNotificationCategories([messageCategory])
