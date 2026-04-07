@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import AudioToolbox
 
 struct EditTopicView: View {
     @Environment(\.dismiss) private var dismiss
@@ -11,6 +12,17 @@ struct EditTopicView: View {
     @State private var useMessageIcon: Bool
     @State private var selectedSoundName: String?
     @State private var selectedDefaultPriority: Int
+
+    // System-Sound-IDs für Vorschau (AudioToolbox)
+    private let soundPreviewIDs: [String: SystemSoundID] = [
+        "Tritone":    1016,
+        "Chime":      1013,
+        "Glass":      1009,
+        "Horn":       1010,
+        "Electronic": 1014,
+        "Bell":       1012,
+        "Xylophone":  1015,
+    ]
 
     private let availableColors: [Color] = [
         .red, .orange, .yellow, .green, .mint, .teal,
@@ -205,6 +217,11 @@ struct EditTopicView: View {
                     Text(sound.displayName).tag(Optional(sound.name))
                 }
             }
+            .onChange(of: selectedSoundName) { _, newValue in
+                if let name = newValue {
+                    previewSound(named: name)
+                }
+            }
         } header: {
             Text("Benachrichtigungen")
         } footer: {
@@ -236,6 +253,12 @@ struct EditTopicView: View {
                 .font(.headline)
         }
         .padding()
+    }
+
+    private func previewSound(named soundName: String) {
+        if let soundID = soundPreviewIDs[soundName] {
+            AudioServicesPlaySystemSound(soundID)
+        }
     }
 
     private func colorMatches(_ color: Color) -> Bool {
