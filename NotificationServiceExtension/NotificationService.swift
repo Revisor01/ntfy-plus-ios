@@ -48,7 +48,7 @@ class NotificationService: UNNotificationServiceExtension {
             // Custom Sound aus App Group UserDefaults (CUSTOM-02)
             if let topic = request.content.userInfo["topic"] as? String,
                let defaults = UserDefaults(suiteName: "group.de.godsapp.ntfy"),
-               let soundMap = defaults.dictionary(forKey: "topicSounds") as? [String: String],
+               let soundMap = defaults.dictionary(forKey: "topicSoundNames") as? [String: String],
                let soundName = soundMap[topic], !soundName.isEmpty {
                 bestAttemptContent.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: soundName))
             }
