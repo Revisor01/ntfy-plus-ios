@@ -20,7 +20,7 @@ final class FirebaseService {
         #if canImport(FirebaseMessaging)
         if Messaging.messaging().apnsToken != nil {
             isReady = true
-            print("FirebaseService initialized - APNs token already available")
+            AppLog.firebase.info("FirebaseService initialized - APNs token already available")
         }
         #endif
 
@@ -38,7 +38,7 @@ final class FirebaseService {
 
     /// Called when APNs token is received - process pending subscriptions
     private func handleAPNsTokenReceived() {
-        print("APNs token received - processing \(pendingSubscriptions.count) pending FCM subscriptions")
+        AppLog.firebase.info("APNs token received - processing \(self.pendingSubscriptions.count, privacy: .public) pending FCM subscriptions")
         isReady = true
 
         // Process all pending subscriptions
@@ -57,7 +57,7 @@ final class FirebaseService {
         // Check again if APNs token is now available (might have arrived since init)
         if !isReady && Messaging.messaging().apnsToken != nil {
             isReady = true
-            print("FirebaseService: APNs token now available")
+            AppLog.firebase.info("FirebaseService: APNs token now available")
         }
         #endif
 
@@ -65,7 +65,7 @@ final class FirebaseService {
             performSubscription(serverURL: serverURL, topic: topic)
         } else {
             // Queue subscription for later when APNs token is available
-            print("APNs token not yet available - queuing FCM subscription for \(serverURL)/\(topic)")
+            AppLog.firebase.info("APNs token not yet available - queuing FCM subscription for \(serverURL, privacy: .private)/\(topic, privacy: .private)")
             pendingSubscriptions.append((serverURL: serverURL, topic: topic))
         }
     }
@@ -77,17 +77,17 @@ final class FirebaseService {
         // So we subscribe directly to the topic name
         let fcmTopic = topic
 
-        print("🔔 Subscribing to FCM topic: '\(fcmTopic)' (APNs token: \(Messaging.messaging().apnsToken != nil ? "✓" : "✗"))")
+        AppLog.firebase.info("🔔 Subscribing to FCM topic: '\(fcmTopic, privacy: .private)' (APNs token: \(Messaging.messaging().apnsToken != nil ? "✓" : "✗", privacy: .public))")
 
         Messaging.messaging().subscribe(toTopic: fcmTopic) { error in
             if let error = error {
-                print("🔔 ❌ Failed to subscribe to FCM topic '\(fcmTopic)': \(error)")
+                AppLog.firebase.error("🔔 ❌ Failed to subscribe to FCM topic '\(fcmTopic, privacy: .private)': \(error.localizedDescription, privacy: .public)")
             } else {
-                print("🔔 ✅ Successfully subscribed to FCM topic: '\(fcmTopic)'")
+                AppLog.firebase.info("🔔 ✅ Successfully subscribed to FCM topic: '\(fcmTopic, privacy: .private)'")
             }
         }
         #else
-        print("Firebase not configured - skipping FCM subscription for \(serverURL)/\(topic)")
+        AppLog.firebase.info("Firebase not configured - skipping FCM subscription for \(serverURL, privacy: .private)/\(topic, privacy: .private)")
         #endif
     }
 
@@ -102,13 +102,13 @@ final class FirebaseService {
 
         Messaging.messaging().unsubscribe(fromTopic: fcmTopic) { error in
             if let error = error {
-                print("Failed to unsubscribe from FCM topic \(fcmTopic): \(error)")
+                AppLog.firebase.error("Failed to unsubscribe from FCM topic \(fcmTopic, privacy: .private): \(error.localizedDescription, privacy: .public)")
             } else {
-                print("Successfully unsubscribed from FCM topic: \(fcmTopic)")
+                AppLog.firebase.info("Successfully unsubscribed from FCM topic: \(fcmTopic, privacy: .private)")
             }
         }
         #else
-        print("Firebase not configured - skipping FCM unsubscription for \(serverURL)/\(topic)")
+        AppLog.firebase.info("Firebase not configured - skipping FCM unsubscription for \(serverURL, privacy: .private)/\(topic, privacy: .private)")
         #endif
     }
 

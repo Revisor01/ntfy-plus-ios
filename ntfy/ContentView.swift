@@ -37,7 +37,7 @@ struct ContentView: View {
                 if !hasInitialized {
                     hasInitialized = true
                     Task {
-                        print("📱 Initial load - fetching messages")
+                        AppLog.ui.info("📱 Initial load - fetching messages")
                         await refreshAllTopics()
                         await subscribeToAllTopics()
                     }
@@ -60,7 +60,7 @@ struct ContentView: View {
                     isLocked = true
                 }
                 hasEnteredBackground = false
-                print("📱 willEnterForeground - refreshing messages")
+                AppLog.ui.info("📱 willEnterForeground - refreshing messages")
                 Task {
                     await NotificationService.shared.clearBadge()
                     await refreshAllTopics()
@@ -160,7 +160,7 @@ struct ContentView: View {
         if isLocked { isLocked = false }
 
         selectedTopic = topics.first { $0.name == topicName }
-        print("🔗 Deep Link: navigiere zu Topic '\(topicName)'")
+        AppLog.ui.info("🔗 Deep Link: navigiere zu Topic '\(topicName, privacy: .private)'")
     }
 
     /// Fetch missed messages for all topics (called when app becomes active)

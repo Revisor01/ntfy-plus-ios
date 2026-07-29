@@ -24,10 +24,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Request notification authorization
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
             if granted {
-                print("Notification permission granted")
+                AppLog.app.info("Notification permission granted")
             }
             if let error = error {
-                print("Notification authorization error: \(error)")
+                AppLog.app.error("Notification authorization error: \(error.localizedDescription, privacy: .public)")
             }
         }
 
@@ -47,7 +47,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         #endif
 
         let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
-        print("APNs Device Token: \(tokenString)")
+        AppLog.app.info("APNs Device Token: \(tokenString, privacy: .private)")
 
         // Notify FirebaseService that APNs token is available
         NotificationCenter.default.post(name: .apnsTokenReceived, object: nil)
@@ -55,7 +55,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication,
                      didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        print("Failed to register for remote notifications: \(error)")
+        AppLog.app.error("Failed to register for remote notifications: \(error.localizedDescription, privacy: .public)")
     }
 
     // MARK: - Handle Background Notifications
@@ -64,7 +64,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
 
-        print("📬 Received remote notification (background fetch)")
+        AppLog.app.info("📬 Received remote notification (background fetch)")
 
         // The NotificationServiceExtension already handles the push notification
         // and removes the subtitle. This method is called for background fetch
@@ -144,7 +144,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
             // Fallback auf userInfo["click"] falls kein "url"-Key vorhanden
             let urlString = (userInfo["url"] as? String) ?? (userInfo["click"] as? String)
             if let urlString = urlString, let url = URL(string: urlString) {
-                print("🔗 OPEN_URL action: \(urlString)")
+                AppLog.app.info("🔗 OPEN_URL action: \(urlString, privacy: .private)")
                 Task { @MainActor in
                     UIApplication.shared.open(url)
                 }
@@ -155,7 +155,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
             // Handle click URL if present (ntfy v2.16+)
             if let clickURLString = userInfo["click"] as? String,
                let clickURL = URL(string: clickURLString) {
-                print("🔗 Opening click URL: \(clickURLString)")
+                AppLog.app.info("🔗 Opening click URL: \(clickURLString, privacy: .private)")
                 Task { @MainActor in
                     UIApplication.shared.open(clickURL)
                 }
@@ -181,7 +181,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
 extension AppDelegate: MessagingDelegate {
     nonisolated func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let fcmToken = fcmToken else { return }
-        print("Firebase FCM Token: \(fcmToken)")
+        AppLog.app.info("Firebase FCM Token: \(fcmToken, privacy: .private)")
 
         // Store token for later use
         try? KeychainManager.shared.saveFCMToken(fcmToken)

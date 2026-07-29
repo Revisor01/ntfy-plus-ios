@@ -283,7 +283,7 @@ final class NtfyService {
             onClear: onClear
         )
 
-        print("🔌 SSE: Subscribing to \(topic)")
+        AppLog.network.info("🔌 SSE: Subscribing to \(topic, privacy: .private)")
 
         // WICHTIG: Alle Werte als lokale lets capturen BEVOR Task.detached startet.
         // So wird activeConfigs im detached Task NIE referenziert — kein MainActor-Isolation-Problem.
@@ -301,7 +301,7 @@ final class NtfyService {
 
             let urlString = "\(capturedServerURL)/\(capturedTopic)/sse"
             guard let url = URL(string: urlString) else {
-                print("🔌 SSE: Invalid URL for \(capturedTopic)")
+                AppLog.network.error("🔌 SSE: Invalid URL for \(capturedTopic, privacy: .private)")
                 return
             }
 
@@ -315,25 +315,25 @@ final class NtfyService {
 
                 do {
                     await MainActor.run { self.connectionStatus = .connecting }
-                    print("🔌 SSE: Connecting to \(capturedTopic)...")
+                    AppLog.network.info("🔌 SSE: Connecting to \(capturedTopic, privacy: .private)...")
 
                     let (bytes, response) = try await self.session.bytes(for: request)
 
                     guard let httpResponse = response as? HTTPURLResponse,
                           httpResponse.statusCode == 200 else {
                         let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-                        print("🔌 SSE: Bad response \(code) for \(capturedTopic)")
+                        AppLog.network.error("🔌 SSE: Bad response \(code, privacy: .public) for \(capturedTopic, privacy: .private)")
                         break  // Nicht retrybar bei Auth-Fehlern etc.
                     }
 
                     // Verbindung erfolgreich — Backoff zuruecksetzen
                     backoffSeconds = 1
                     await MainActor.run { self.connectionStatus = .connected }
-                    print("🔌 SSE: Connected to \(capturedTopic)")
+                    AppLog.network.info("🔌 SSE: Connected to \(capturedTopic, privacy: .private)")
 
                     for try await line in bytes.lines {
                         if Task.isCancelled {
-                            print("🔌 SSE: Cancelled for \(capturedTopic)")
+                            AppLog.network.info("🔌 SSE: Cancelled for \(capturedTopic, privacy: .private)")
                             return
                         }
 
@@ -343,13 +343,13 @@ final class NtfyService {
                                let message = try? JSONDecoder().decode(NtfyMessage.self, from: data) {
                                 switch message.event {
                                 case "message":
-                                    print("🔌 SSE: Received message for \(capturedTopic)")
+                                    AppLog.network.info("🔌 SSE: Received message for \(capturedTopic, privacy: .private)")
                                     await capturedOnMessage(message)
                                 case "message_delete":
-                                    print("🔌 SSE: Received delete for \(capturedTopic), id: \(message.id)")
+                                    AppLog.network.info("🔌 SSE: Received delete for \(capturedTopic, privacy: .private), id: \(message.id, privacy: .private)")
                                     await capturedOnDelete?(message.id)
                                 case "message_clear":
-                                    print("🔌 SSE: Received clear for \(capturedTopic)")
+                                    AppLog.network.info("🔌 SSE: Received clear for \(capturedTopic, privacy: .private)")
                                     await capturedOnClear?()
                                 default:
                                     break
@@ -358,11 +358,11 @@ final class NtfyService {
                         }
                     }
 
-                    print("🔌 SSE: Stream ended for \(capturedTopic), reconnecting in \(backoffSeconds)s")
+                    AppLog.network.info("🔌 SSE: Stream ended for \(capturedTopic, privacy: .private), reconnecting in \(backoffSeconds, privacy: .public)s")
 
                 } catch {
                     if Task.isCancelled { return }
-                    print("🔌 SSE Error for \(capturedTopic): \(error), retry in \(backoffSeconds)s")
+                    AppLog.network.error("🔌 SSE Error for \(capturedTopic, privacy: .private): \(error.localizedDescription, privacy: .public), retry in \(backoffSeconds, privacy: .public)s")
                 }
 
                 // Backoff-Sleep
@@ -415,7 +415,7 @@ final class NtfyService {
             if isSatisfied && !lastPathSatisfied {
                 // Nur reconnecten wenn vorher NICHT satisfied war (echte Wiederherstellung)
                 lastPathSatisfied = true
-                print("🔌 Network: Path restored (\(path.availableInterfaces.map(\.name).joined(separator: ", ")))")
+                AppLog.network.info("🔌 Network: Path restored (\(path.availableInterfaces.map(\.name).joined(separator: ", "), privacy: .public))")
                 Task { @MainActor in
                     self.reconnectTask?.cancel()
                     self.reconnectTask = Task {
@@ -441,7 +441,7 @@ final class NtfyService {
     }
 
     func reconnectAll() async {
-        print("🔌 Network: Reconnecting all \(activeConfigs.count) subscriptions")
+        AppLog.network.info("🔌 Network: Reconnecting all \(self.activeConfigs.count, privacy: .public) subscriptions")
 
         // Alle aktiven Tasks canceln
         for task in activeTasks.values {
@@ -605,7 +605,7 @@ final class NtfyService {
         }
         if !stale.isEmpty {
             try? context.save()
-            print("🔄 Cleanup: deleted \(stale.count) expired DeletedMessage records")
+            AppLog.network.info("🔄 Cleanup: deleted \(stale.count, privacy: .public) expired DeletedMessage records")
         }
     }
 
@@ -631,7 +631,7 @@ final class NtfyService {
 
         if !old.isEmpty {
             try? context.save()
-            print("🔄 Cleanup: deleted \(old.count) messages older than \(retentionDays) days")
+            AppLog.network.info("🔄 Cleanup: deleted \(old.count, privacy: .public) messages older than \(retentionDays, privacy: .public) days")
         }
     }
 
@@ -645,7 +645,7 @@ final class NtfyService {
         context: ModelContext,
         since: String
     ) async {
-        print("🔄 Starting parallel refresh for \(topics.count) topics (since: \(since))")
+        AppLog.network.info("🔄 Starting parallel refresh for \(topics.count, privacy: .public) topics (since: \(since, privacy: .public))")
 
         // Cleanup abgelaufener Records vor dem Refresh
         cleanupDeletedMessages(context: context)
@@ -677,10 +677,10 @@ final class NtfyService {
                             password: credentials?.password,
                             token: token
                         )
-                        print("🔄 Fetched \(messages.count) messages for \(topicName)")
+                        AppLog.network.info("🔄 Fetched \(messages.count, privacy: .public) messages for \(topicName, privacy: .private)")
                         return FetchResult(serverURL: serverURL, topicName: topicName, messages: messages)
                     } catch {
-                        print("❌ Failed to refresh topic \(topicName): \(error)")
+                        AppLog.network.error("❌ Failed to refresh topic \(topicName, privacy: .private): \(error.localizedDescription, privacy: .public)")
                         return nil
                     }
                 }
@@ -703,7 +703,7 @@ final class NtfyService {
         }
 
         writeWidgetData(context: context)
-        print("✅ Parallel refresh complete")
+        AppLog.network.info("✅ Parallel refresh complete")
     }
 
     // MARK: - Test Authentication
@@ -741,7 +741,7 @@ final class NtfyService {
         guard let containerURL = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: "group.de.godsapp.ntfy"
         ) else {
-            print("❌ Widget: App Group Container nicht erreichbar")
+            AppLog.network.error("❌ Widget: App Group Container nicht erreichbar")
             return
         }
 
@@ -773,6 +773,6 @@ final class NtfyService {
 
         // Widget-Timeline invalidieren
         WidgetCenter.shared.reloadAllTimelines()
-        print("✅ Widget: \(entries.count) ungelesene Nachrichten in widget_data.json geschrieben")
+        AppLog.network.info("✅ Widget: \(entries.count, privacy: .public) ungelesene Nachrichten in widget_data.json geschrieben")
     }
 }

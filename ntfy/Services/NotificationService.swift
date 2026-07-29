@@ -22,7 +22,7 @@ final class NotificationService: NSObject {
             }
             return granted
         } catch {
-            print("Notification authorization error: \(error)")
+            AppLog.notifications.error("Notification authorization error: \(error.localizedDescription, privacy: .public)")
             return false
         }
     }
@@ -111,7 +111,7 @@ final class NotificationService: NSObject {
         do {
             try await center.add(request)
         } catch {
-            print("Failed to schedule notification: \(error)")
+            AppLog.notifications.error("Failed to schedule notification: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -128,7 +128,7 @@ final class NotificationService: NSObject {
         do {
             try await center.setBadgeCount(count)
         } catch {
-            print("Failed to set badge: \(error)")
+            AppLog.notifications.error("Failed to set badge: \(error.localizedDescription, privacy: .public)")
         }
     }
 

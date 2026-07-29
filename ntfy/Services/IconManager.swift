@@ -119,7 +119,7 @@ final class IconManager {
 
                 return resized
             } catch {
-                print("Failed to load icon: \(error)")
+                AppLog.ui.error("Failed to load icon: \(error.localizedDescription, privacy: .public)")
                 return nil
             }
         }
@@ -272,7 +272,7 @@ struct CachedAsyncImage<Placeholder: View, Failure: View>: View {
                 AttachmentImageCache.shared.saveToDisk(data, for: urlString)
                 image = downloaded
             } catch {
-                print("❌ CachedAsyncImage disk fetch failed: \(error)")
+                AppLog.ui.error("❌ CachedAsyncImage disk fetch failed: \(error.localizedDescription, privacy: .public)")
                 didFail = true
             }
             isLoading = false
