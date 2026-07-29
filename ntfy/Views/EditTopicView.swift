@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftData
-import AudioToolbox
 
 struct EditTopicView: View {
     @Environment(\.dismiss) private var dismiss
@@ -10,33 +9,11 @@ struct EditTopicView: View {
     @State private var customLetter: String
     @State private var selectedIcon: String?
     @State private var useMessageIcon: Bool
-    @State private var selectedSoundName: String?
     @State private var selectedDefaultPriority: Int
-
-    // System-Sound-IDs für Vorschau (AudioToolbox)
-    private let soundPreviewIDs: [String: SystemSoundID] = [
-        "Tritone":    1016,
-        "Chime":      1013,
-        "Glass":      1009,
-        "Horn":       1010,
-        "Electronic": 1014,
-        "Bell":       1012,
-        "Xylophone":  1015,
-    ]
 
     private let availableColors: [Color] = [
         .red, .orange, .yellow, .green, .mint, .teal,
         .cyan, .blue, .indigo, .purple, .pink, .brown
-    ]
-
-    private let availableSounds: [(name: String, displayName: String)] = [
-        ("Tritone", "Tritone"),
-        ("Chime", "Chime"),
-        ("Glass", "Glass"),
-        ("Horn", "Horn"),
-        ("Electronic", "Electronic"),
-        ("Bell", "Bell"),
-        ("Xylophone", "Xylophone"),
     ]
 
     private let availableIcons: [String] = [
@@ -60,7 +37,6 @@ struct EditTopicView: View {
         _customLetter = State(initialValue: topic.customLetter ?? "")
         _selectedIcon = State(initialValue: topic.iconName)
         _useMessageIcon = State(initialValue: topic.shouldUseMessageIcon)
-        _selectedSoundName = State(initialValue: topic.customSoundName)
         _selectedDefaultPriority = State(initialValue: topic.defaultPriority)
     }
 
@@ -208,23 +184,10 @@ struct EditTopicView: View {
                         .tag(priority.rawValue)
                 }
             }
-
-            // Sound Picker
-            Picker("Benachrichtigungston", selection: $selectedSoundName) {
-                Text("Standard").tag(Optional<String>.none)
-                ForEach(availableSounds, id: \.name) { sound in
-                    Text(sound.displayName).tag(Optional(sound.name))
-                }
-            }
-            .onChange(of: selectedSoundName) { _, newValue in
-                if let name = newValue {
-                    previewSound(named: name)
-                }
-            }
         } header: {
             Text("Benachrichtigungen")
         } footer: {
-            Text("Standard-Priorität wird für neue Nachrichten dieses Topics vorbelegt.")
+            Text("Standard-Priorität wird für neue Nachrichten dieses Topics vorbelegt. Der Benachrichtigungston richtet sich nach der Priorität der jeweiligen Nachricht (Standard bzw. kritisch/laut bei hoher/dringender Priorität).")
                 .font(.caption)
         }
     }
@@ -254,12 +217,6 @@ struct EditTopicView: View {
         .padding()
     }
 
-    private func previewSound(named soundName: String) {
-        if let soundID = soundPreviewIDs[soundName] {
-            AudioServicesPlaySystemSound(soundID)
-        }
-    }
-
     private func colorMatches(_ color: Color) -> Bool {
         let colorHex = color.toHex()
         let selectedHex = selectedColor.toHex()
@@ -271,9 +228,7 @@ struct EditTopicView: View {
         topic.customLetter = customLetter.isEmpty ? nil : customLetter
         topic.iconName = selectedIcon
         topic.useMessageIcon = useMessageIcon
-        topic.customSoundName = selectedSoundName
         topic.defaultPriority = selectedDefaultPriority
-        TopicSoundSync.update(topicName: topic.name, soundName: selectedSoundName)
     }
 }
 
