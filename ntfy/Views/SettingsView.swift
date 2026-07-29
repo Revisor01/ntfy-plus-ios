@@ -19,6 +19,11 @@ struct SettingsView: View {
     @State private var showingDeleteConfirmation = false
     @State private var showingAddServer = false
     @State private var showingServerEditor: Server?
+    @State private var cacheSize: Int = 0
+
+    private var formattedCacheSize: String {
+        ByteCountFormatter.string(fromByteCount: Int64(cacheSize), countStyle: .file)
+    }
 
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
@@ -134,10 +139,19 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
 
+                    HStack {
+                        Text("Bild-Cache")
+                        Spacer()
+                        Text(formattedCacheSize)
+                            .foregroundStyle(.secondary)
+                    }
+
                     Button("Cache leeren") {
                         IconManager.shared.clearCache()
                         AttachmentImageCache.shared.clearDiskCache()
+                        cacheSize = AttachmentImageCache.shared.diskCacheSize()
                     }
+                    .disabled(cacheSize == 0)
 
                     Picker("Nachrichten aufbewahren", selection: $retentionDays) {
                         Text("7 Tage").tag(7)
@@ -207,6 +221,9 @@ struct SettingsView: View {
             }
             .navigationTitle("Einstellungen")
             .navigationBarTitleDisplayMode(.inline)
+            .task {
+                cacheSize = AttachmentImageCache.shared.diskCacheSize()
+            }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Fertig") {
