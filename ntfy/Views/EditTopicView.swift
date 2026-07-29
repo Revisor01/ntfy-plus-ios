@@ -144,7 +144,6 @@ struct EditTopicView: View {
                         }
                         .onTapGesture {
                             selectedColor = color
-                            selectedIcon = nil
                         }
                 }
             }

@@ -19,8 +19,8 @@ final class AttachmentImageCache {
     }
 
     private func cacheKey(for urlString: String) -> String {
-        let hash = urlString.utf8.reduce(5381) { ($0 << 5) &+ $0 &+ Int($1) }
-        return String(format: "%016x.img", abs(hash))
+        let hash = urlString.utf8.reduce(UInt(5381)) { ($0 << 5) &+ $0 &+ UInt($1) }
+        return String(format: "%016lx.img", hash)
     }
 
     func loadFromDisk(for urlString: String) -> UIImage? {
@@ -233,12 +233,16 @@ struct CachedAsyncImage<Placeholder: View, Failure: View>: View {
                 placeholder()
             }
         }
-        .task {
+        .task(id: url) {
             await loadImage()
         }
     }
 
     private func loadImage() async {
+        image = nil
+        didFail = false
+        isLoading = false
+
         guard let urlString = url, !urlString.isEmpty else { return }
 
         if useDiskCache {

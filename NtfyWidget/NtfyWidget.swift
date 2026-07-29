@@ -19,7 +19,10 @@ struct WidgetMessage: Identifiable, Codable {
     var id: String { messageId }
 
     var deepLinkURL: URL {
-        URL(string: "ntfy://topic/\(topic)") ?? URL(string: "ntfy://")!
+        let encodedTopic = topic.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? topic
+        return URL(string: "ntfy://topic/\(encodedTopic)")
+            ?? URL(string: "ntfy://topic/\(topic)")
+            ?? URL(string: "ntfy://")!
     }
 
     var timeDate: Date {
