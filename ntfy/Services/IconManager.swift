@@ -55,6 +55,19 @@ final class AttachmentImageCache {
             try? FileManager.default.removeItem(at: file)
         }
     }
+
+    /// Belegter Speicher des Disk-Caches in Bytes.
+    func diskCacheSize() -> Int {
+        guard let dir = cacheDirectory else { return 0 }
+        let contents = (try? FileManager.default.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: [.fileSizeKey]
+        )) ?? []
+        return contents.reduce(0) { total, file in
+            let size = (try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+            return total + size
+        }
+    }
 }
 
 // MARK: - Icon Manager
