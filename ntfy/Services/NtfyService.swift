@@ -180,6 +180,9 @@ final class NtfyService {
         click: String? = nil,
         attach: String? = nil,
         icon: String? = nil,
+        delay: String? = nil,
+        email: String? = nil,
+        markdown: Bool = false,
         username: String? = nil,
         password: String? = nil,
         token: String? = nil
@@ -219,6 +222,18 @@ final class NtfyService {
 
         if let icon = icon {
             request.setValue(icon, forHTTPHeaderField: "Icon")
+        }
+
+        if let delay = delay, !delay.isEmpty {
+            request.setValue(delay, forHTTPHeaderField: "Delay")
+        }
+
+        if let email = email, !email.isEmpty {
+            request.setValue(email, forHTTPHeaderField: "Email")
+        }
+
+        if markdown {
+            request.setValue("yes", forHTTPHeaderField: "Markdown")
         }
 
         let (_, response) = try await session.data(for: request)
