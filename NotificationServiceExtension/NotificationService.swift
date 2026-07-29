@@ -40,6 +40,10 @@ class NotificationService: UNNotificationServiceExtension {
             // Clear subtitle (this removes the topic)
             bestAttemptContent.subtitle = ""
 
+            // Category für interaktive Actions (Als gelesen / Antworten / Link öffnen)
+            // auch bei Push-Notifications sichtbar machen — sonst nur bei lokalen Notifications
+            bestAttemptContent.categoryIdentifier = "NTFY_MESSAGE"
+
             // Thread identifier für Topic-Gruppierung (GROUP-01)
             if let topic = request.content.userInfo["topic"] as? String, !topic.isEmpty {
                 bestAttemptContent.threadIdentifier = topic
