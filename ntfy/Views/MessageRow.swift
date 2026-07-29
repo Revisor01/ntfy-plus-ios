@@ -488,7 +488,7 @@ struct MessageRow: View {
                 }
             }
         } catch {
-            print("HTTP action failed: \(error)")
+            AppLog.ui.error("HTTP action failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -515,7 +515,7 @@ struct MessageRow: View {
         // Nur sichere Web-Schemes oeffnen — verhindert javascript:/data:/file: aus fremden Nachrichten
         let allowedSchemes = ["http", "https"]
         guard let scheme = url.scheme?.lowercased(), allowedSchemes.contains(scheme) else {
-            print("❌ openURL: unsicheres Schema abgelehnt: \(url.scheme ?? "nil")")
+            AppLog.ui.error("❌ openURL: unsicheres Schema abgelehnt: \(url.scheme ?? "nil", privacy: .public)")
             return
         }
         UIApplication.shared.open(url)

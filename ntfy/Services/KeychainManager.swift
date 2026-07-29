@@ -23,7 +23,7 @@ final class KeychainManager: Sendable {
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
 
         let status = SecItemAdd(query as CFDictionary, nil)
@@ -41,6 +41,7 @@ final class KeychainManager: Sendable {
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecReturnData as String: true,
+            kSecReturnAttributes as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
 
@@ -49,10 +50,30 @@ final class KeychainManager: Sendable {
 
         switch status {
         case errSecSuccess:
-            guard let data = result as? Data,
+            guard let attributes = result as? [String: Any],
+                  let data = attributes[kSecValueData as String] as? Data,
                   let string = String(data: data, encoding: .utf8) else {
                 throw KeychainError.decodingFailed
             }
+
+            // Transparente Migration: Items mit dem alten Accessibility-Attribut
+            // (kSecAttrAccessibleAfterFirstUnlock, ohne ThisDeviceOnly) auf das
+            // neue Attribut umschreiben. Ein Fehlschlag der Migration darf den
+            // Lesevorgang nicht scheitern lassen — der Wert wird trotzdem zurueckgegeben.
+            let currentAccessible = attributes[kSecAttrAccessible as String] as? String
+            let targetAccessible = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly as String
+            if currentAccessible != targetAccessible {
+                let updateQuery: [String: Any] = [
+                    kSecClass as String: kSecClassGenericPassword,
+                    kSecAttrService as String: service,
+                    kSecAttrAccount as String: key
+                ]
+                let updateAttributes: [String: Any] = [
+                    kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+                ]
+                _ = SecItemUpdate(updateQuery as CFDictionary, updateAttributes as CFDictionary)
+            }
+
             return string
         case errSecItemNotFound:
             return nil
