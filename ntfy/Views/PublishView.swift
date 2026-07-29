@@ -20,6 +20,10 @@ struct PublishView: View {
     @State private var tags = ""
     @State private var clickURL = ""
     @State private var iconURL = ""
+    @State private var attachURL = ""
+    @State private var delay = ""
+    @State private var email = ""
+    @State private var useMarkdown = false
 
     @State private var showAdvanced = false
     @State private var isLoading = false
@@ -93,6 +97,21 @@ struct PublishView: View {
                         TextField("Icon-URL", text: $iconURL)
                             .textInputAutocapitalization(.never)
                             .keyboardType(.URL)
+
+                        TextField("Anhang-URL", text: $attachURL)
+                            .textInputAutocapitalization(.never)
+                            .keyboardType(.URL)
+
+                        TextField("Verzögerung (z.B. 30min, 9am)", text: $delay)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+
+                        TextField("E-Mail-Weiterleitung", text: $email)
+                            .textInputAutocapitalization(.never)
+                            .keyboardType(.emailAddress)
+                            .autocorrectionDisabled()
+
+                        Toggle("Markdown-Formatierung", isOn: $useMarkdown)
                     }
                 }
 
@@ -180,8 +199,11 @@ struct PublishView: View {
                     priority: priority,
                     tags: parsedTags,
                     click: clickURL.isEmpty ? nil : clickURL.trimmed(),
-                    attach: nil,
+                    attach: attachURL.isEmpty ? nil : attachURL.trimmed(),
                     icon: iconURL.isEmpty ? nil : iconURL.trimmed(),
+                    delay: delay.isEmpty ? nil : delay.trimmed(),
+                    email: email.isEmpty ? nil : email.trimmed(),
+                    markdown: useMarkdown,
                     username: credentials?.username,
                     password: credentials?.password,
                     token: token
