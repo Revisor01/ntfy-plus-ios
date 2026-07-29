@@ -71,10 +71,11 @@ struct ntfyApp: App {
     }
 
     private func deleteAndRetryModelContainer() {
-        // Delete SwiftData store files
-        let url = URL.applicationSupportDirectory.appending(path: "default.store")
+        // Delete SwiftData store files (base store + WAL/SHM sibling files)
+        let directory = URL.applicationSupportDirectory
         for suffix in ["", "-shm", "-wal"] {
-            try? FileManager.default.removeItem(at: url.appending(path: suffix))
+            let fileURL = directory.appendingPathComponent("default.store" + suffix)
+            try? FileManager.default.removeItem(at: fileURL)
         }
         retryModelContainer()
     }

@@ -17,6 +17,7 @@ struct MessagesView: View {
     @State private var showingUnsubscribeConfirm = false
     @State private var searchText = ""
     @State private var showOnlyStarred = false
+    @State private var displayName: String
 
     @Environment(\.dismiss) private var dismiss
 
@@ -25,6 +26,7 @@ struct MessagesView: View {
         let topicId = topic.id
         let topicName = topic.name
         let serverURL = topic.serverURL
+        _displayName = State(initialValue: topicName)
         _messages = Query(
             filter: #Predicate<StoredMessage> { message in
                 message.topic?.id == topicId
@@ -67,13 +69,13 @@ struct MessagesView: View {
                 ContentUnavailableView {
                     Label("Keine Nachrichten", systemImage: AppIcons.empty)
                 } description: {
-                    Text("Nachrichten für \(topic.name) werden hier angezeigt.")
+                    Text("Nachrichten für \(displayName) werden hier angezeigt.")
                 }
             } else {
                 messageList
             }
         }
-        .navigationTitle(topic.name)
+        .navigationTitle(displayName)
         .navigationBarTitleDisplayMode(.large)
         .searchable(text: $searchText, prompt: "Nachrichten durchsuchen")
         .toolbar {
@@ -238,12 +240,12 @@ struct MessagesView: View {
     }
 
     private func markAllAsRead() {
-        for message in messages where !message.isRead {
+        for message in filteredMessages where !message.isRead {
             message.isRead = true
+            topic.unreadCount = max(0, topic.unreadCount - 1)
             NotificationService.shared.removeNotification(withIdentifier: message.messageId)
         }
-        // unreadCount auf Topic direkt auf 0 setzen (alle gelesen)
-        topic.unreadCount = 0
+        try? modelContext.save()
         Task {
             await NotificationService.shared.clearBadge()
         }
@@ -322,16 +324,25 @@ struct MessagesView: View {
     }
 
     private func unsubscribeTopic() {
+        // Copy topic-dependent values before mutating/deleting the model object,
+        // so nothing below reads a potentially invalidated SwiftData object.
+        let topicName = topic.name
+        let topicServerURL = topic.serverURL
+
         // Unsubscribe from SSE
-        ntfyService.unsubscribe(serverURL: topic.serverURL, topic: topic.name)
+        ntfyService.unsubscribe(serverURL: topicServerURL, topic: topicName)
 
         // Unsubscribe from Firebase topic
-        FirebaseService.shared.unsubscribeFromTopic(serverURL: topic.serverURL, topic: topic.name)
+        FirebaseService.shared.unsubscribeFromTopic(serverURL: topicServerURL, topic: topicName)
 
         // Remove all notifications for this topic
         Task {
-            await NotificationService.shared.removeNotifications(forTopic: topic.name)
+            await NotificationService.shared.removeNotifications(forTopic: topicName)
         }
+
+        // Dismiss the view before invalidating the model object, so the body
+        // isn't re-evaluated against a deleted `topic`.
+        dismiss()
 
         // Delete all messages
         for message in messages {
@@ -350,9 +361,6 @@ struct MessagesView: View {
         Task {
             await updateBadgeCount()
         }
-
-        // Dismiss the view
-        dismiss()
     }
 
     private func updateBadgeCount() async {

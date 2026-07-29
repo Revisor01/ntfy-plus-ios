@@ -293,11 +293,13 @@ struct AddTopicView: View {
                     topic.lastMessageAt = Date(timeIntervalSince1970: TimeInterval(latestMessage.time))
                 }
 
-                // Save credentials if using custom server
-                if useCustomServer && useAuth {
+                // Save credentials if authentication is used (including the default server)
+                if useAuth {
                     if useToken {
-                        try? KeychainManager.shared.saveToken(serverURL: serverURL, token: token)
-                    } else {
+                        if !token.isEmpty {
+                            try? KeychainManager.shared.saveToken(serverURL: serverURL, token: token)
+                        }
+                    } else if !username.isEmpty {
                         try? KeychainManager.shared.saveCredentials(
                             serverURL: serverURL,
                             username: username,
