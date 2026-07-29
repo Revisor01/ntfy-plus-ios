@@ -243,36 +243,37 @@ struct MessageRow: View {
             if let expiry = URL(string: url)?.expiryDate, expiry < Date() {
                 expiredAttachmentPlaceholder
             } else {
-                // Image attachment - show inline
+                // Image attachment - show inline (Disk-Cache: kein Neuladen beim Scrollen)
                 VStack(alignment: .leading, spacing: 0) {
-                    AsyncImage(url: URL(string: url)) { phase in
-                        switch phase {
-                        case .empty:
+                    CachedAsyncImage(
+                        url: url,
+                        useDiskCache: true,
+                        content: { image in
+                            AnyView(
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(maxHeight: 250)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                                    }
+                                    .onTapGesture {
+                                        openURL(url)
+                                    }
+                            )
+                        },
+                        placeholder: {
                             RoundedRectangle(cornerRadius: 12)
                                 .fill(Color.secondary.opacity(0.1))
                                 .frame(height: 150)
-                                .overlay {
-                                    ProgressView()
-                                }
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(maxHeight: 250)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                                }
-                                .onTapGesture {
-                                    openURL(url)
-                                }
-                        case .failure:
+                                .overlay { ProgressView() }
+                        },
+                        failure: {
                             attachmentFileRow(attachment: attachment, url: url, icon: "photo", color: AppColors.primary)
-                        @unknown default:
-                            EmptyView()
                         }
-                    }
+                    )
                     // Expiry-Indikator unter dem Bild (nur wenn URL noch nicht abgelaufen)
                     if let expiry = URL(string: url)?.expiryDate, expiry > Date() {
                         Text(expiryLabel(expiry))
@@ -511,6 +512,12 @@ struct MessageRow: View {
 
     private func openURL(_ urlString: String) {
         guard let url = URL(string: urlString) else { return }
+        // Nur sichere Web-Schemes oeffnen — verhindert javascript:/data:/file: aus fremden Nachrichten
+        let allowedSchemes = ["http", "https"]
+        guard let scheme = url.scheme?.lowercased(), allowedSchemes.contains(scheme) else {
+            print("❌ openURL: unsicheres Schema abgelehnt: \(url.scheme ?? "nil")")
+            return
+        }
         UIApplication.shared.open(url)
     }
 
