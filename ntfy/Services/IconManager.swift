@@ -199,26 +199,25 @@ final class IconManager {
 
 // MARK: - AsyncImage with Caching
 
-struct CachedAsyncImage: View {
+struct CachedAsyncImage<Placeholder: View, Failure: View>: View {
     let url: String?
-    let placeholder: String
     var useDiskCache: Bool = false
+    @ViewBuilder let content: (Image) -> AnyView
+    @ViewBuilder let placeholder: () -> Placeholder
+    @ViewBuilder let failure: () -> Failure
 
     @State private var image: UIImage?
     @State private var isLoading = false
+    @State private var didFail = false
 
     var body: some View {
         Group {
             if let image = image {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-            } else if isLoading {
-                ProgressView()
+                content(Image(uiImage: image))
+            } else if didFail {
+                failure()
             } else {
-                Image(systemName: placeholder)
-                    .font(.title2)
-                    .foregroundStyle(.secondary)
+                placeholder()
             }
         }
         .task {
@@ -240,6 +239,7 @@ struct CachedAsyncImage: View {
             isLoading = true
             guard let url = URL(string: urlString) else {
                 isLoading = false
+                didFail = true
                 return
             }
             do {
@@ -248,6 +248,7 @@ struct CachedAsyncImage: View {
                       httpResponse.statusCode == 200,
                       let downloaded = UIImage(data: data) else {
                     isLoading = false
+                    didFail = true
                     return
                 }
                 // Auf Disk speichern
@@ -255,13 +256,36 @@ struct CachedAsyncImage: View {
                 image = downloaded
             } catch {
                 print("❌ CachedAsyncImage disk fetch failed: \(error)")
+                didFail = true
             }
             isLoading = false
         } else {
             // NSCache-basiertes Verhalten (IconManager)
             isLoading = true
             image = await IconManager.shared.loadIcon(from: urlString)
+            if image == nil { didFail = true }
             isLoading = false
+        }
+    }
+}
+
+// Convenience-Init fuer die einfache SF-Symbol-Platzhalter-Variante (Icons/Topics)
+extension CachedAsyncImage where Placeholder == AnyView, Failure == AnyView {
+    init(url: String?, placeholder: String, useDiskCache: Bool = false) {
+        self.url = url
+        self.useDiskCache = useDiskCache
+        self.content = { img in
+            AnyView(img.resizable().aspectRatio(contentMode: .fit))
+        }
+        self.placeholder = {
+            AnyView(ProgressView())
+        }
+        self.failure = {
+            AnyView(
+                Image(systemName: placeholder)
+                    .font(.title2)
+                    .foregroundStyle(.secondary)
+            )
         }
     }
 }
