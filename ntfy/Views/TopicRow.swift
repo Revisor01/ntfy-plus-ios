@@ -73,7 +73,8 @@ struct TopicRow: View {
             .red, .orange, .yellow, .green, .mint, .teal,
             .cyan, .blue, .indigo, .purple, .pink, .brown
         ]
-        return colors[abs(hash) % colors.count]
+        let index = Int(hash.magnitude % UInt(colors.count))
+        return colors[index]
     }
 
     @ViewBuilder
