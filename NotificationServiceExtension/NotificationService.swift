@@ -49,14 +49,6 @@ class NotificationService: UNNotificationServiceExtension {
                 bestAttemptContent.threadIdentifier = topic
             }
 
-            // Custom Sound aus App Group UserDefaults (CUSTOM-02)
-            if let topic = request.content.userInfo["topic"] as? String,
-               let defaults = UserDefaults(suiteName: "group.de.godsapp.ntfy"),
-               let soundMap = defaults.dictionary(forKey: "topicSoundNames") as? [String: String],
-               let soundName = soundMap[topic], !soundName.isEmpty {
-                bestAttemptContent.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: soundName))
-            }
-
             // Increment badge count
             let newBadge = getBadgeCount() + 1
             setBadgeCount(newBadge)

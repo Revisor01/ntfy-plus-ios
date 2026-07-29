@@ -56,7 +56,9 @@ final class NotificationService: NSObject {
             content.body = body
         }
 
-        // Sound based on priority
+        // Sound based on priority — keine Custom-Sound-Dateien im Bundle,
+        // daher nur die von iOS ohne eigene Assets unterstuetzten Stufen
+        // (Standard vs. kritisch/laut bei hoher/dringender Prioritaet).
         switch message.priorityLevel {
         case .min:
             content.sound = nil
@@ -68,14 +70,6 @@ final class NotificationService: NSObject {
             content.sound = .defaultCritical
         case .urgent:
             content.sound = .defaultCriticalSound(withAudioVolume: 1.0)
-        }
-
-        // Custom Sound aus App Group UserDefaults (CUSTOM-01)
-        // Überschreibt nur Standard-Sounds (.default/.low), nicht Critical-Sounds (high/urgent)
-        if let customSoundName = TopicSoundSync.soundName(for: topic),
-           message.priorityLevel != .high,
-           message.priorityLevel != .urgent {
-            content.sound = UNNotificationSound(named: UNNotificationSoundName(rawValue: customSoundName))
         }
 
         // Category for actions
