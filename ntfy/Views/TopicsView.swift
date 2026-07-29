@@ -145,9 +145,6 @@ struct TopicsView: View {
                     showingSettings = true
                 } label: {
                     Image(systemName: AppIcons.settings)
-                        .overlay(alignment: .topTrailing) {
-                            connectionDot
-                        }
                 }
             }
         }
@@ -172,24 +169,6 @@ struct TopicsView: View {
         .background(.ultraThinMaterial)
         .clipShape(Capsule())
         .padding(.bottom, AppSpacing.sm)
-    }
-
-    @ViewBuilder
-    private var connectionDot: some View {
-        switch ntfyService.connectionStatus {
-        case .connected:
-            EmptyView()
-        case .connecting, .reconnecting:
-            Circle()
-                .fill(.orange)
-                .frame(width: 8, height: 8)
-                .offset(x: 2, y: -2)
-        case .disconnected:
-            Circle()
-                .fill(.red)
-                .frame(width: 8, height: 8)
-                .offset(x: 2, y: -2)
-        }
     }
 
     private func deleteTopic(_ topic: Topic) {
