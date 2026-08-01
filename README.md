@@ -9,9 +9,9 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Platform-iOS%2017+-blue?logo=apple" alt="Platform">
-  <img src="https://img.shields.io/badge/Swift-5.9-orange?logo=swift" alt="Swift">
-  <img src="https://img.shields.io/badge/Xcode-15+-blue?logo=xcode" alt="Xcode">
+  <img src="https://img.shields.io/badge/Platform-iOS%2026+-blue?logo=apple" alt="Platform">
+  <img src="https://img.shields.io/badge/Swift-6.0-orange?logo=swift" alt="Swift">
+  <img src="https://img.shields.io/badge/Xcode-26+-blue?logo=xcode" alt="Xcode">
   <img src="https://img.shields.io/github/license/Revisor01/ntfy-plus-ios" alt="License">
   <img src="https://img.shields.io/github/v/release/Revisor01/ntfy-plus-ios" alt="Version">
 </p>
@@ -46,13 +46,13 @@
 
 ### TestFlight
 
-*Demnächst verfügbar*
+Aktuelle Version: **2.0 (Build 6)** — Zugang auf Anfrage über die unten genannte Kontaktadresse.
 
 ### Selbst kompilieren
 
 1. Repository klonen:
    ```bash
-   git clone https://github.com/SimonLuworksphere/ntfy-plus-ios.git
+   git clone https://github.com/Revisor01/ntfy-plus-ios.git
    ```
 2. `ntfy-ios.xcodeproj` in Xcode öffnen
 3. Team/Signing konfigurieren
