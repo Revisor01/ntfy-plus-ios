@@ -74,6 +74,12 @@ Erste über TestFlight ausgelieferte Version (Build 6).
 - FCM-Token in die Keychain migriert
 - Härtung von `openURL` durch Validierung des URL-Schemas
 
+### Bekannte Einschränkung
+
+- Das `NtfyWidget`-Target wurde direkt in `project.pbxproj` eingetragen, nicht über die
+  Xcode-UI. Falls Xcode Probleme mit dem Widget-Target meldet, das Target in Xcode neu
+  anlegen statt die pbxproj weiter von Hand zu editieren.
+
 ## [1.0.0] - 2026-01-09
 
 Erste Version.
