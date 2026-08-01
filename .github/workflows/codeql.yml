@@ -1,9 +1,10 @@
 name: CodeQL
 
-# Eigener Workflow statt Default-Setup: der CodeQL-Autobuild scheitert an nanopb
+# Eigener Workflow statt Default-Setup: dessen Autobuild scheitert an nanopb
 # (transitive Firebase-Abhängigkeit). Das Paket enthält eine Datei namens "build",
 # wo Xcode ein Verzeichnis anlegen will — "File exists but is not a directory".
-# build-mode: none analysiert den Swift-Quelltext ohne Kompilierung und umgeht das.
+# Swift unterstützt build-mode: none nicht, daher ein manueller Build mit
+# eigenem DerivedData-Pfad, der die Kollision umgeht.
 
 on:
   push:
@@ -30,7 +31,44 @@ jobs:
         uses: github/codeql-action/init@v4
         with:
           languages: swift
-          build-mode: none
+          build-mode: manual
+
+      # GoogleService-Info.plist ist bewusst nicht im Repo (enthaelt API-Keys).
+      # Fuer die reine Quelltext-Analyse genuegt ein Platzhalter ohne echte Werte —
+      # die Datei muss nur existieren, damit der Resource-Build-Step durchlaeuft.
+      - name: Platzhalter fuer GoogleService-Info.plist
+        run: |
+          cat > ntfy/GoogleService-Info.plist <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>API_KEY</key><string>ci-placeholder</string>
+            <key>GCM_SENDER_ID</key><string>000000000000</string>
+            <key>BUNDLE_ID</key><string>de.godsapp.ntfy</string>
+            <key>PROJECT_ID</key><string>ci-placeholder</string>
+            <key>GOOGLE_APP_ID</key><string>1:000000000000:ios:0000000000000000</string>
+            <key>IS_ADS_ENABLED</key><false/>
+            <key>IS_ANALYTICS_ENABLED</key><false/>
+            <key>IS_APPINVITE_ENABLED</key><false/>
+            <key>IS_GCM_ENABLED</key><true/>
+            <key>IS_SIGNIN_ENABLED</key><false/>
+          </dict>
+          </plist>
+          PLIST
+
+      - name: Build
+        run: |
+          xcodebuild build \
+            -project ntfy-ios.xcodeproj \
+            -scheme ntfy \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            | xcpretty || exit ${PIPESTATUS[0]}
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
