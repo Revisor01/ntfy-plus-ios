@@ -16,7 +16,8 @@ on:
 jobs:
   analyze:
     name: Analyze Swift
-    runs-on: ubuntu-latest
+    # Swift-Analyse laeuft nur auf macOS-Runnern
+    runs-on: macos-latest
     permissions:
       security-events: write
       contents: read
