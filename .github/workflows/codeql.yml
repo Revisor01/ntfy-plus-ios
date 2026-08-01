@@ -1,0 +1,37 @@
+name: CodeQL
+
+# Eigener Workflow statt Default-Setup: der CodeQL-Autobuild scheitert an nanopb
+# (transitive Firebase-Abhängigkeit). Das Paket enthält eine Datei namens "build",
+# wo Xcode ein Verzeichnis anlegen will — "File exists but is not a directory".
+# build-mode: none analysiert den Swift-Quelltext ohne Kompilierung und umgeht das.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 4 * * 1"
+
+jobs:
+  analyze:
+    name: Analyze Swift
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: swift
+          build-mode: none
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:swift"
