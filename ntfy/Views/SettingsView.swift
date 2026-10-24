@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import LocalAuthentication
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
@@ -7,7 +8,6 @@ struct SettingsView: View {
 
     @Query private var servers: [Server]
     @Query private var topics: [Topic]
-    @Query private var messages: [StoredMessage]
 
     @State private var defaultServerURL = AppSettings.defaultServerURL
     @State private var selectedTheme = AppSettings.appTheme
@@ -20,6 +20,12 @@ struct SettingsView: View {
     @State private var showingAddServer = false
     @State private var showingServerEditor: Server?
     @State private var cacheSize: Int = 0
+    /// Nachrichtenanzahl per fetchCount statt @Query (laedt sonst alle Nachrichten in den Speicher)
+    @State private var messageCount: Int = 0
+    @State private var serverToDelete: ServerDeletionInfo?
+    @State private var showingDeleteServerConfirmation = false
+    @State private var showingLockUnavailable = false
+    @State private var lockUnavailableMessage = ""
 
     private var formattedCacheSize: String {
         ByteCountFormatter.string(fromByteCount: Int64(cacheSize), countStyle: .file)
@@ -67,7 +73,7 @@ struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    .onDelete(perform: deleteServers)
+                    .onDelete(perform: confirmDeleteServers)
 
                     Button {
                         showingAddServer = true
@@ -94,8 +100,20 @@ struct SettingsView: View {
                             AppSettings.hapticFeedback = newValue
                         }
 
-                    Toggle("App mit Face ID sperren", isOn: $biometricLockEnabled)
+                    Toggle(DeviceAuth.lockToggleTitle(), isOn: $biometricLockEnabled)
                         .onChange(of: biometricLockEnabled) { _, newValue in
+                            if newValue {
+                                // Ohne Geraetecode gibt es keinen Entsperr-Weg — sonst Aussperrung
+                                let context = LAContext()
+                                var authError: NSError?
+                                guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &authError) else {
+                                    lockUnavailableMessage = DeviceAuth.unavailableMessage(for: authError)
+                                    showingLockUnavailable = true
+                                    biometricLockEnabled = false
+                                    AppSettings.biometricLockEnabled = false
+                                    return
+                                }
+                            }
                             AppSettings.biometricLockEnabled = newValue
                         }
                 } header: {
@@ -135,7 +153,7 @@ struct SettingsView: View {
                     HStack {
                         Text("Nachrichten")
                         Spacer()
-                        Text("\(messages.count)")
+                        Text("\(messageCount)")
                             .foregroundStyle(.secondary)
                     }
 
@@ -223,6 +241,7 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .task {
                 cacheSize = AttachmentImageCache.shared.diskCacheSize()
+                refreshMessageCount()
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -245,23 +264,104 @@ struct SettingsView: View {
             } message: {
                 Text("Diese Aktion kann nicht rückgängig gemacht werden.")
             }
+            .alert("Server entfernen?", isPresented: $showingDeleteServerConfirmation, presenting: serverToDelete) { info in
+                Button("Abbrechen", role: .cancel) {
+                    serverToDelete = nil
+                }
+                Button("Entfernen", role: .destructive) {
+                    deleteServer(id: info.id)
+                    serverToDelete = nil
+                }
+            } message: { info in
+                Text(info.message)
+            }
+            .alert("Sperre nicht verfügbar", isPresented: $showingLockUnavailable) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(lockUnavailableMessage)
+            }
         }
     }
 
-    private func deleteServers(at offsets: IndexSet) {
-        for index in offsets {
-            let server = servers[index]
-            try? KeychainManager.shared.deleteCredentials(serverURL: server.url)
-            try? KeychainManager.shared.deleteToken(serverURL: server.url)
-            modelContext.delete(server)
+    private func refreshMessageCount() {
+        messageCount = (try? modelContext.fetchCount(FetchDescriptor<StoredMessage>())) ?? 0
+    }
+
+    private func confirmDeleteServers(at offsets: IndexSet) {
+        // Swipe-to-Delete loescht nicht sofort — erst nach Bestaetigung
+        guard let index = offsets.first, index < servers.count else { return }
+        let server = servers[index]
+        let serverURL = server.url
+        let topicCount = topics.filter { $0.serverURL == serverURL }.count
+        var text = "Der Server \"\(server.name)\" und seine Zugangsdaten werden entfernt."
+        if topicCount == 1 {
+            text += " Das zugehörige Topic und seine Nachrichten werden ebenfalls entfernt."
+        } else if topicCount > 1 {
+            text += " Die \(topicCount) zugehörigen Topics und ihre Nachrichten werden ebenfalls entfernt."
         }
+        // Nur einfache Werte im Alert halten — nicht das Model, das gleich geloescht wird
+        serverToDelete = ServerDeletionInfo(id: server.id, message: text)
+        showingDeleteServerConfirmation = true
+    }
+
+    private func deleteServer(id serverId: String) {
+        let idPredicate = #Predicate<Server> { $0.id == serverId }
+        guard let server = (try? modelContext.fetch(FetchDescriptor<Server>(predicate: idPredicate)))?.first else { return }
+
+        // Werte kopieren, bevor das Model geloescht wird
+        let serverURL = server.url
+        let wasDefault = server.isDefault || AppSettings.defaultServerURL == serverURL
+
+        // Topics dieses Servers mit demselben Pfad wie "Topic entfernen" aufraeumen
+        // (die Zugangsdaten werden gleich geloescht — die Topics waeren sonst verwaist)
+        let topicPredicate = #Predicate<Topic> { $0.serverURL == serverURL }
+        let serverTopics = (try? modelContext.fetch(FetchDescriptor<Topic>(predicate: topicPredicate))) ?? []
+        for topic in serverTopics {
+            TopicActions.remove(topic, context: modelContext, ntfyService: NtfyService.shared)
+        }
+
+        try? KeychainManager.shared.deleteCredentials(serverURL: serverURL)
+        try? KeychainManager.shared.deleteToken(serverURL: serverURL)
+        modelContext.delete(server)
+
+        // War es der Standard-Server, einen anderen Server zum Standard machen
+        if wasDefault {
+            let remainingPredicate = #Predicate<Server> { $0.id != serverId }
+            let remainingDescriptor = FetchDescriptor<Server>(
+                predicate: remainingPredicate,
+                sortBy: [SortDescriptor(\.addedAt)]
+            )
+            let remaining = (try? modelContext.fetch(remainingDescriptor)) ?? []
+            if let newDefault = remaining.first(where: { $0.isDefault }) ?? remaining.first {
+                for other in remaining {
+                    other.isDefault = other.id == newDefault.id
+                }
+                AppSettings.defaultServerURL = newDefault.url
+            }
+        }
+
+        try? modelContext.save()
+        refreshMessageCount()
     }
 
     private func deleteAllMessages() {
-        for message in messages {
+        let allMessages = (try? modelContext.fetch(FetchDescriptor<StoredMessage>())) ?? []
+        for message in allMessages {
             modelContext.delete(message)
         }
+
+        // Denormalisierte Topic-Felder zuruecksetzen
+        for topic in topics {
+            topic.unreadCount = 0
+            topic.lastMessagePreview = nil
+            topic.lastMessagePriority = 3
+            topic.lastMessageIconURL = nil
+        }
         try? modelContext.save()
+
+        NotificationService.shared.removeAllNotifications()
+        NtfyService.shared.writeWidgetData(context: modelContext)
+        messageCount = 0
 
         Task {
             await NotificationService.shared.clearBadge()
@@ -273,6 +373,12 @@ struct SettingsView: View {
             UIApplication.shared.open(url)
         }
     }
+}
+
+/// Daten fuer den Bestaetigungsdialog "Server entfernen"
+struct ServerDeletionInfo: Identifiable {
+    let id: String
+    let message: String
 }
 
 // MARK: - Server Editor
@@ -413,15 +519,41 @@ struct ServerEditorView: View {
             }
 
             await MainActor.run {
+                let targetServer: Server
                 if let existingServer = server {
+                    // Alte URL sichern, BEVOR sie ueberschrieben wird — die Keychain-
+                    // Eintraege sind unter der alten URL abgelegt
+                    let oldURL = existingServer.url
+
+                    // Clear old credentials (unter der alten URL)
+                    try? KeychainManager.shared.deleteCredentials(serverURL: oldURL)
+                    try? KeychainManager.shared.deleteToken(serverURL: oldURL)
+
                     // Update existing
                     existingServer.name = name.trimmed()
                     existingServer.url = serverURL
                     existingServer.useAuth = useAuth
+                    existingServer.username = useAuth && !useToken ? username : nil
 
-                    // Clear old credentials
-                    try? KeychainManager.shared.deleteCredentials(serverURL: existingServer.url)
-                    try? KeychainManager.shared.deleteToken(serverURL: existingServer.url)
+                    if oldURL != serverURL {
+                        // Topics des Servers auf die neue URL umziehen
+                        let topicPredicate = #Predicate<Topic> { $0.serverURL == oldURL }
+                        let serverTopics = (try? modelContext.fetch(FetchDescriptor<Topic>(predicate: topicPredicate))) ?? []
+                        for topic in serverTopics {
+                            topic.serverURL = serverURL
+                        }
+                        // DeletedMessage-Records ebenfalls umziehen, sonst kommen
+                        // geloeschte Nachrichten beim naechsten Refresh zurueck
+                        let deletedPredicate = #Predicate<DeletedMessage> { $0.serverURL == oldURL }
+                        let deletedRecords = (try? modelContext.fetch(FetchDescriptor<DeletedMessage>(predicate: deletedPredicate))) ?? []
+                        for record in deletedRecords {
+                            record.serverURL = serverURL
+                        }
+                        if AppSettings.defaultServerURL == oldURL {
+                            AppSettings.defaultServerURL = serverURL
+                        }
+                    }
+                    targetServer = existingServer
                 } else {
                     // Create new
                     let newServer = Server(
@@ -432,6 +564,7 @@ struct ServerEditorView: View {
                         isDefault: isDefault
                     )
                     modelContext.insert(newServer)
+                    targetServer = newServer
                 }
 
                 // Save credentials
@@ -449,16 +582,16 @@ struct ServerEditorView: View {
 
                 // Handle default server
                 if isDefault {
-                    // Make all other servers non-default
+                    // Make all other servers non-default — gegen die tatsaechliche
+                    // Ziel-ID vergleichen (bei neuem Server ist `server` nil)
+                    let targetId = targetServer.id
                     let descriptor = FetchDescriptor<Server>()
                     if let allServers = try? modelContext.fetch(descriptor) {
-                        for s in allServers where s.id != server?.id {
+                        for s in allServers where s.id != targetId {
                             s.isDefault = false
                         }
                     }
-                    if let server = server {
-                        server.isDefault = true
-                    }
+                    targetServer.isDefault = true
                     AppSettings.defaultServerURL = serverURL
                 }
 
