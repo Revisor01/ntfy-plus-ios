@@ -46,7 +46,7 @@
 
 ### TestFlight
 
-Aktuelle Version: **2.0 (Build 6)** — Zugang auf Anfrage über die unten genannte Kontaktadresse.
+Aktuelle Version: **2.1 (Build 7)** — Zugang auf Anfrage über die unten genannte Kontaktadresse.
 
 ### Selbst kompilieren
 

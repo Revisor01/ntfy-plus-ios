@@ -16,7 +16,7 @@ enum CachedFormatters {
         return formatter
     }()
 
-    nonisolated(unsafe) static let mediumDateShortTime: DateFormatter = {
+    static let mediumDateShortTime: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
@@ -24,21 +24,21 @@ enum CachedFormatters {
         return formatter
     }()
 
-    nonisolated(unsafe) static let shortTime: DateFormatter = {
+    static let shortTime: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         formatter.locale = Locale(identifier: "de_DE")
         return formatter
     }()
 
-    nonisolated(unsafe) static let shortDate: DateFormatter = {
+    static let shortDate: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "dd.MM.yy"
         formatter.locale = Locale(identifier: "de_DE")
         return formatter
     }()
 
-    nonisolated(unsafe) static let amzDate: DateFormatter = {
+    static let amzDate: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
         formatter.locale = Locale(identifier: "en_US_POSIX")
