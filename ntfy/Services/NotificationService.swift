@@ -1,6 +1,7 @@
 import Foundation
 import UserNotifications
 import UIKit
+import SwiftData
 
 @MainActor
 final class NotificationService: NSObject {
@@ -16,7 +17,10 @@ final class NotificationService: NSObject {
 
     func requestAuthorization() async -> Bool {
         do {
-            let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound, .provisional])
+            // Einziger Autorisierungs-Pfad der App (AppDelegate ruft ebenfalls hierher).
+            // Ohne .provisional: sonst landet die App je nach Aufrufreihenfolge still
+            // in der Mitteilungszentrale statt den regulaeren Dialog zu zeigen.
+            let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
             if granted {
                 registerForRemoteNotifications()
             }
@@ -36,79 +40,6 @@ final class NotificationService: NSObject {
         UIApplication.shared.registerForRemoteNotifications()
     }
 
-    // MARK: - Local Notifications
-
-    func scheduleLocalNotification(for message: NtfyMessage, topic: String) async {
-        guard AppSettings.notificationsEnabled else { return }
-
-        let content = UNMutableNotificationContent()
-
-        // Title - don't show topic as subtitle
-        if let title = message.title {
-            content.title = title
-            // No subtitle - we don't want to show the topic
-        } else {
-            content.title = topic
-        }
-
-        // Body
-        if let body = message.message {
-            content.body = body
-        }
-
-        // Sound based on priority — keine Custom-Sound-Dateien im Bundle,
-        // daher nur die von iOS ohne eigene Assets unterstuetzten Stufen
-        // (Standard vs. kritisch/laut bei hoher/dringender Prioritaet).
-        switch message.priorityLevel {
-        case .min:
-            content.sound = nil
-        case .low:
-            content.sound = .default
-        case .default:
-            content.sound = .default
-        case .high:
-            content.sound = .defaultCritical
-        case .urgent:
-            content.sound = .defaultCriticalSound(withAudioVolume: 1.0)
-        }
-
-        // Category for actions
-        content.categoryIdentifier = "NTFY_MESSAGE"
-
-        // User info
-        content.userInfo = [
-            "messageId": message.id,
-            "topic": topic,
-            "time": message.time
-        ]
-
-        // Badge
-        content.badge = NSNumber(value: await getBadgeCount() + 1)
-
-        // Thread identifier for grouping
-        content.threadIdentifier = topic
-
-        // Interruption level based on priority
-        if message.priorityLevel == .urgent {
-            content.interruptionLevel = .timeSensitive
-        } else if message.priorityLevel == .min {
-            content.interruptionLevel = .passive
-        }
-
-        // Create request
-        let request = UNNotificationRequest(
-            identifier: message.id,
-            content: content,
-            trigger: nil // Deliver immediately
-        )
-
-        do {
-            try await center.add(request)
-        } catch {
-            AppLog.notifications.error("Failed to schedule notification: \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
     // MARK: - Badge Management
 
     func getBadgeCount() async -> Int {
@@ -118,22 +49,37 @@ final class NotificationService: NSObject {
         }
     }
 
+    /// Geteilter Badge-Zaehler im App-Group-Container. Die NotificationServiceExtension
+    /// inkrementiert ihn pro Push; die App schreibt bei jedem Setzen den massgeblichen Wert,
+    /// damit die NSE vom richtigen Stand aus weiterzaehlt.
+    nonisolated static var sharedBadgeFileURL: URL? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.de.godsapp.ntfy")?
+            .appendingPathComponent("badge_count.txt")
+    }
+
     func setBadgeCount(_ count: Int) async {
+        let safeCount = max(0, count)
+        if let url = Self.sharedBadgeFileURL {
+            try? String(safeCount).write(to: url, atomically: true, encoding: .utf8)
+        }
         do {
-            try await center.setBadgeCount(count)
+            try await center.setBadgeCount(safeCount)
         } catch {
             AppLog.notifications.error("Failed to set badge: \(error.localizedDescription, privacy: .public)")
         }
     }
 
     func clearBadge() async {
-        // Reset shared badge counter (used by NotificationServiceExtension)
-        if let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.de.godsapp.ntfy")?
-            .appendingPathComponent("badge_count.txt") {
-            try? "0".write(to: url, atomically: true, encoding: .utf8)
-        }
-
+        // setBadgeCount setzt auch den geteilten Zaehler der NotificationServiceExtension zurueck
         await setBadgeCount(0)
+    }
+
+    /// Setzt den Badge auf die Anzahl ungelesener Nachrichten in SwiftData.
+    func syncBadgeWithUnreadCount(context: ModelContext) async {
+        let unreadPredicate = #Predicate<StoredMessage> { !$0.isRead }
+        let descriptor = FetchDescriptor(predicate: unreadPredicate)
+        let unreadCount = (try? context.fetchCount(descriptor)) ?? 0
+        await setBadgeCount(unreadCount)
     }
 
     // MARK: - Notification Management
