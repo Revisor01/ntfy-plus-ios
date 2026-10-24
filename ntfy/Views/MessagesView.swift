@@ -17,7 +17,8 @@ struct MessagesView: View {
     @State private var showingUnsubscribeConfirm = false
     @State private var searchText = ""
     @State private var showOnlyStarred = false
-    @State private var displayName: String
+    /// Entprellt das Badge-Update, wenn beim Scrollen viele Nachrichten als gelesen markiert werden
+    @State private var badgeUpdateTask: Task<Void, Never>?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -26,7 +27,6 @@ struct MessagesView: View {
         let topicId = topic.id
         let topicName = topic.name
         let serverURL = topic.serverURL
-        _displayName = State(initialValue: topicName)
         _messages = Query(
             filter: #Predicate<StoredMessage> { message in
                 message.topic?.id == topicId
@@ -41,11 +41,18 @@ struct MessagesView: View {
         )
     }
 
-    private var deletedMessageIds: Set<String> {
-        Set(deletedMessages.map { $0.messageId })
+    /// Titel direkt aus dem Topic — nach dem Loeschen des Topics nicht mehr auf
+    /// dessen Attribute zugreifen (SwiftData-Backing-Data ist dann ungueltig).
+    private var displayName: String {
+        if topic.isDeleted || topic.modelContext == nil {
+            return ""
+        }
+        return topic.name
     }
 
     private var filteredMessages: [StoredMessage] {
+        // Set einmal pro Auswertung bauen (nicht pro Nachricht im Filter-Closure)
+        let deletedMessageIds = Set(deletedMessages.map { $0.messageId })
         var result = messages.filter { !deletedMessageIds.contains($0.messageId) }
 
         // Star-Filter (Toolbar-Toggle)
@@ -64,15 +71,18 @@ struct MessagesView: View {
     }
 
     var body: some View {
+        // Gefilterte Liste nur einmal pro Body-Auswertung berechnen
+        let visibleMessages = filteredMessages
+
         Group {
-            if filteredMessages.isEmpty {
+            if visibleMessages.isEmpty {
                 ContentUnavailableView {
                     Label("Keine Nachrichten", systemImage: AppIcons.empty)
                 } description: {
                     Text("Nachrichten für \(displayName) werden hier angezeigt.")
                 }
             } else {
-                messageList
+                messageList(visibleMessages)
             }
         }
         .navigationTitle(displayName)
@@ -120,6 +130,7 @@ struct MessagesView: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+                .accessibilityLabel("Weitere Aktionen")
             }
         }
         .refreshable {
@@ -147,16 +158,16 @@ struct MessagesView: View {
                 unsubscribeTopic()
             }
         } message: {
-            Text("Das Topic \"\(topic.name)\" wird entfernt. Alle lokalen Nachrichten werden gelöscht.")
+            Text("Das Topic \"\(displayName)\" wird entfernt. Alle lokalen Nachrichten werden gelöscht.")
         }
         .task {
             await ntfyService.refreshTopics([topic], context: modelContext, since: "168h")
         }
     }
 
-    private var messageList: some View {
+    private func messageList(_ visibleMessages: [StoredMessage]) -> some View {
         List {
-            ForEach(filteredMessages) { message in
+            ForEach(visibleMessages) { message in
                 MessageRow(message: message)
                     .onAppear {
                         markAsRead(message)
@@ -195,6 +206,10 @@ struct MessagesView: View {
 
         }
         .listStyle(.plain)
+        // Markdown-Links & Co. in allen Zeilen: nur http/https oeffnen
+        .environment(\.openURL, OpenURLAction { url in
+            url.isSafeWebURL ? .systemAction : .discarded
+        })
     }
 
     private func markAsRead(_ message: StoredMessage) {
@@ -204,11 +219,10 @@ struct MessagesView: View {
             if let topicRef = message.topic {
                 topicRef.unreadCount = max(0, topicRef.unreadCount - 1)
             }
-            // Remove notification and update badge
+            // Remove notification and update badge (entprellt — beim Scrollen
+            // erscheinen viele Zeilen kurz hintereinander)
             NotificationService.shared.removeNotification(withIdentifier: message.messageId)
-            Task {
-                await updateBadgeCount()
-            }
+            scheduleBadgeUpdate()
         }
     }
 
@@ -226,9 +240,7 @@ struct MessagesView: View {
         if message.isRead {
             NotificationService.shared.removeNotification(withIdentifier: message.messageId)
         }
-        Task {
-            await updateBadgeCount()
-        }
+        scheduleBadgeUpdate()
     }
 
     private func toggleStar(_ message: StoredMessage) {
@@ -240,14 +252,18 @@ struct MessagesView: View {
     }
 
     private func markAllAsRead() {
+        // Markiert nur die aktuell sichtbaren (gefilterten) Nachrichten —
+        // daher Zaehler und Badge danach aus der DB neu berechnen statt pauschal zu leeren.
         for message in filteredMessages where !message.isRead {
             message.isRead = true
-            topic.unreadCount = max(0, topic.unreadCount - 1)
             NotificationService.shared.removeNotification(withIdentifier: message.messageId)
         }
+        TopicActions.recalculateUnreadCount(for: topic, context: modelContext)
         try? modelContext.save()
+        ntfyService.writeWidgetData(context: modelContext)
+        badgeUpdateTask?.cancel()
         Task {
-            await NotificationService.shared.clearBadge()
+            await TopicActions.updateBadge(context: modelContext)
         }
     }
 
@@ -290,9 +306,7 @@ struct MessagesView: View {
         }
         try? modelContext.save()
 
-        Task {
-            await updateBadgeCount()
-        }
+        scheduleBadgeUpdate()
     }
 
     private func clearAllMessages() {
@@ -318,57 +332,32 @@ struct MessagesView: View {
         }
         try? modelContext.save()
 
-        Task {
-            await updateBadgeCount()
-        }
+        scheduleBadgeUpdate()
     }
 
     private func unsubscribeTopic() {
-        // Copy topic-dependent values before mutating/deleting the model object,
-        // so nothing below reads a potentially invalidated SwiftData object.
-        let topicName = topic.name
-        let topicServerURL = topic.serverURL
+        badgeUpdateTask?.cancel()
 
-        // Unsubscribe from SSE
-        ntfyService.unsubscribe(serverURL: topicServerURL, topic: topicName)
-
-        // Unsubscribe from Firebase topic
-        FirebaseService.shared.unsubscribeFromTopic(serverURL: topicServerURL, topic: topicName)
-
-        // Remove all notifications for this topic
-        Task {
-            await NotificationService.shared.removeNotifications(forTopic: topicName)
-        }
-
-        // Dismiss the view before invalidating the model object, so the body
-        // isn't re-evaluated against a deleted `topic`.
+        // View zuerst schliessen, damit der Body nicht mehr gegen ein
+        // geloeschtes `topic` ausgewertet wird.
         dismiss()
 
-        // Delete all messages
-        for message in messages {
-            modelContext.delete(message)
-        }
-
-        // Delete all deleted message records for this topic
-        for deleted in deletedMessages {
-            modelContext.delete(deleted)
-        }
-
-        // Delete the topic itself
-        modelContext.delete(topic)
-        try? modelContext.save()
-
-        Task {
-            await updateBadgeCount()
-        }
+        // Gemeinsamer Aufraeum-Pfad (SSE/FCM abmelden, Benachrichtigungen,
+        // Nachrichten, DeletedMessage-Records, Topic loeschen, Badge, Widget).
+        // TopicActions.remove kopiert alle benoetigten Werte vor dem Loeschen.
+        TopicActions.remove(topic, context: modelContext, ntfyService: ntfyService)
     }
 
-    private func updateBadgeCount() async {
-        // Count unread messages across all topics
-        let unreadPredicate = #Predicate<StoredMessage> { !$0.isRead }
-        let descriptor = FetchDescriptor(predicate: unreadPredicate)
-        let unreadCount = (try? modelContext.fetchCount(descriptor)) ?? 0
-        await NotificationService.shared.setBadgeCount(unreadCount)
+    /// Badge-Update entprellen: viele markAsRead-Aufrufe beim Scrollen
+    /// resultieren in einem einzigen fetchCount.
+    private func scheduleBadgeUpdate() {
+        badgeUpdateTask?.cancel()
+        let context = modelContext
+        badgeUpdateTask = Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            await TopicActions.updateBadge(context: context)
+        }
     }
 }
 
