@@ -7,6 +7,7 @@ struct AddTopicView: View {
     @Environment(NtfyService.self) private var ntfyService
 
     @Query private var servers: [Server]
+    @Query private var existingTopics: [Topic]
 
     @State private var topicName = ""
     @State private var selectedServer: Server?
@@ -32,9 +33,47 @@ struct AddTopicView: View {
         servers.first { $0.isDefault }
     }
 
+    /// Server-URL, unter der das Topic angelegt wuerde (nil = noch keine gueltige Auswahl)
+    private var targetServerURL: String? {
+        if useCustomServer {
+            let trimmedURL = customServerURL.trimmed()
+            guard trimmedURL.isValidURL else { return nil }
+            return trimmedURL.normalizedServerURL(addProtocolIfMissing: false)
+        }
+        return selectedServer?.url
+    }
+
+    private var topicNameError: String? {
+        let name = topicName.trimmed()
+        guard !name.isEmpty else { return nil }
+        if !name.isValidNtfyTopicName {
+            return "Nur Buchstaben (A–Z, a–z), Ziffern, „-“ und „_“ erlaubt, maximal 64 Zeichen."
+        }
+        if isDuplicate {
+            return "Dieses Topic ist auf diesem Server bereits abonniert."
+        }
+        return nil
+    }
+
+    private var customServerURLError: String? {
+        guard useCustomServer else { return nil }
+        let trimmedURL = customServerURL.trimmed()
+        guard !trimmedURL.isEmpty else { return nil }
+        return trimmedURL.isValidURL ? nil : "Ungültige URL — bitte mit http:// oder https:// angeben."
+    }
+
+    /// Gleiches Topic auf gleichem Server bereits abonniert?
+    private var isDuplicate: Bool {
+        guard let serverURL = targetServerURL else { return false }
+        let name = topicName.trimmed()
+        return existingTopics.contains { $0.serverURL == serverURL && $0.name == name }
+    }
+
     private var isValid: Bool {
-        !topicName.trimmed().isEmpty &&
-        (selectedServer != nil || (!customServerURL.trimmed().isEmpty && customServerURL.isValidURL))
+        let name = topicName.trimmed()
+        // Bei "Eigener Server" muss die eingegebene URL gueltig sein —
+        // ein vorher gewaehlter Server zaehlt dann nicht
+        return name.isValidNtfyTopicName && targetServerURL != nil && !isDuplicate
     }
 
     var body: some View {
@@ -48,7 +87,12 @@ struct AddTopicView: View {
                 } header: {
                     Text("Topic")
                 } footer: {
-                    Text("Der Name des Topics, das du abonnieren möchtest.")
+                    if let topicNameError {
+                        Text(topicNameError)
+                            .foregroundStyle(.red)
+                    } else {
+                        Text("Der Name des Topics, das du abonnieren möchtest.")
+                    }
                 }
 
                 // Server selection
@@ -72,6 +116,11 @@ struct AddTopicView: View {
                     }
                 } header: {
                     Text("Server")
+                } footer: {
+                    if let customServerURLError {
+                        Text(customServerURLError)
+                            .foregroundStyle(.red)
+                    }
                 }
 
                 // Authentication
@@ -243,15 +292,10 @@ struct AddTopicView: View {
     }
 
     private func subscribe() {
+        guard isValid, let serverURL = targetServerURL else { return }
+
         isLoading = true
         error = nil
-
-        let serverURL: String
-        if useCustomServer {
-            serverURL = customServerURL.trimmed().normalizedServerURL(addProtocolIfMissing: false)
-        } else {
-            serverURL = selectedServer?.url ?? ""
-        }
 
         let topicNameTrimmed = topicName.trimmed()
 
@@ -271,6 +315,17 @@ struct AddTopicView: View {
                     token: authToken
                 )
 
+                // Doppelt-Check direkt vor dem Anlegen (Eingabe koennte sich geaendert haben)
+                let duplicatePredicate = #Predicate<Topic> { existing in
+                    existing.serverURL == serverURL && existing.name == topicNameTrimmed
+                }
+                let duplicateCount = (try? modelContext.fetchCount(FetchDescriptor<Topic>(predicate: duplicatePredicate))) ?? 0
+                if duplicateCount > 0 {
+                    self.error = "Dieses Topic ist auf diesem Server bereits abonniert."
+                    isLoading = false
+                    return
+                }
+
                 // Success - create topic
                 let topic = Topic(
                     name: topicNameTrimmed,
@@ -283,15 +338,9 @@ struct AddTopicView: View {
 
                 modelContext.insert(topic)
 
-                // Store messages
-                for message in messages {
-                    let storedMessage = StoredMessage(from: message, topic: topic)
-                    modelContext.insert(storedMessage)
-                }
-
-                if let latestMessage = messages.first {
-                    topic.lastMessageAt = Date(timeIntervalSince1970: TimeInterval(latestMessage.time))
-                }
+                // Store messages ueber den zentralen Pfad — setzt unreadCount,
+                // lastMessagePreview/-Priority/-IconURL und lastMessageAt korrekt
+                ntfyService.storeMessages(for: topic, messages: messages, context: modelContext)
 
                 // Save credentials if authentication is used (including the default server)
                 if useAuth {
@@ -309,6 +358,7 @@ struct AddTopicView: View {
                 }
 
                 try? modelContext.save()
+                ntfyService.writeWidgetData(context: modelContext)
 
                 // Subscribe to Firebase topic for push notifications
                 FirebaseService.shared.subscribeToTopic(serverURL: serverURL, topic: topicNameTrimmed)

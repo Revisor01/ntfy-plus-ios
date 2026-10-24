@@ -30,9 +30,48 @@ struct PublishView: View {
     @State private var error: String?
     @State private var showingSuccess = false
 
+    /// Limits laut ntfy-Server (Header-Groessen)
+    private static let maxTitleBytes = 1024
+    private static let maxTagsBytes = 512
+
+    private var trimmedTitle: String {
+        title.trimmed()
+    }
+
+    private var parsedTags: [String] {
+        tags.split(separator: ",")
+            .map { String($0).trimmed() }
+            .filter { !$0.isEmpty }
+    }
+
+    private var customTopicError: String? {
+        guard useCustomTopic else { return nil }
+        let name = customTopicName.trimmed()
+        guard !name.isEmpty else { return nil }
+        return name.isValidNtfyTopicName ? nil : "Nur Buchstaben (A–Z, a–z), Ziffern, „-“ und „_“ erlaubt, maximal 64 Zeichen."
+    }
+
+    private var titleError: String? {
+        trimmedTitle.utf8.count > Self.maxTitleBytes ? "Der Titel ist zu lang (max. \(Self.maxTitleBytes) Bytes)." : nil
+    }
+
+    private var tagsError: String? {
+        parsedTags.joined(separator: ",").utf8.count > Self.maxTagsBytes ? "Die Tags sind zu lang (max. \(Self.maxTagsBytes) Bytes)." : nil
+    }
+
+    private var hasValidTarget: Bool {
+        if useCustomTopic {
+            // Bei "Anderes Topic" zaehlt nur der eingegebene Name, nicht die Picker-Auswahl
+            return customTopicName.trimmed().isValidNtfyTopicName
+        }
+        return topic != nil || topics.first != nil
+    }
+
     private var isValid: Bool {
         !message.trimmed().isEmpty &&
-        (topic != nil || (!useCustomTopic && topics.first != nil) || (useCustomTopic && !customTopicName.trimmed().isEmpty))
+        hasValidTarget &&
+        titleError == nil &&
+        tagsError == nil
     }
 
     var body: some View {
@@ -57,6 +96,11 @@ struct PublishView: View {
                     }
                 } header: {
                     Text("Ziel")
+                } footer: {
+                    if let customTopicError {
+                        Text(customTopicError)
+                            .foregroundStyle(.red)
+                    }
                 }
 
                 // Message
@@ -67,6 +111,11 @@ struct PublishView: View {
                         .frame(minHeight: 100)
                 } header: {
                     Text("Nachricht")
+                } footer: {
+                    if let titleError {
+                        Text(titleError)
+                            .foregroundStyle(.red)
+                    }
                 }
 
                 // Priority
@@ -89,6 +138,12 @@ struct PublishView: View {
                     DisclosureGroup("Erweiterte Optionen", isExpanded: $showAdvanced) {
                         TextField("Tags (kommagetrennt)", text: $tags)
                             .textInputAutocapitalization(.never)
+
+                        if let tagsError {
+                            Text(tagsError)
+                                .font(AppFonts.caption)
+                                .foregroundStyle(.red)
+                        }
 
                         TextField("Klick-URL", text: $clickURL)
                             .textInputAutocapitalization(.never)
@@ -167,6 +222,7 @@ struct PublishView: View {
     }
 
     private func publish() {
+        guard isValid else { return }
         isLoading = true
         error = nil
 
@@ -187,7 +243,10 @@ struct PublishView: View {
         let token = KeychainManager.shared.loadToken(serverURL: serverURL)
         let credentials = KeychainManager.shared.loadCredentials(serverURL: serverURL)
 
-        let parsedTags: [String]? = tags.isEmpty ? nil : tags.split(separator: ",").map { String($0).trimmed() }
+        let tagList = parsedTags
+        let publishTags: [String]? = tagList.isEmpty ? nil : tagList
+        // Titel vor der Leer-Pruefung trimmen (sonst wird " " als Titel gesendet)
+        let publishTitle: String? = trimmedTitle.isEmpty ? nil : trimmedTitle
 
         Task {
             do {
@@ -195,14 +254,14 @@ struct PublishView: View {
                     serverURL: serverURL,
                     topic: topicName,
                     message: message.trimmed(),
-                    title: title.isEmpty ? nil : title.trimmed(),
+                    title: publishTitle,
                     priority: priority,
-                    tags: parsedTags,
-                    click: clickURL.isEmpty ? nil : clickURL.trimmed(),
-                    attach: attachURL.isEmpty ? nil : attachURL.trimmed(),
-                    icon: iconURL.isEmpty ? nil : iconURL.trimmed(),
-                    delay: delay.isEmpty ? nil : delay.trimmed(),
-                    email: email.isEmpty ? nil : email.trimmed(),
+                    tags: publishTags,
+                    click: clickURL.trimmed().isEmpty ? nil : clickURL.trimmed(),
+                    attach: attachURL.trimmed().isEmpty ? nil : attachURL.trimmed(),
+                    icon: iconURL.trimmed().isEmpty ? nil : iconURL.trimmed(),
+                    delay: delay.trimmed().isEmpty ? nil : delay.trimmed(),
+                    email: email.trimmed().isEmpty ? nil : email.trimmed(),
                     markdown: useMarkdown,
                     username: credentials?.username,
                     password: credentials?.password,
@@ -218,13 +277,15 @@ struct PublishView: View {
                     isLoading = false
                 }
             } catch let ntfyError as NtfyError {
+                let description = ntfyError.errorDescription ?? ntfyError.localizedDescription
                 await MainActor.run {
-                    error = ntfyError.localizedDescription
+                    error = "Senden fehlgeschlagen: \(description)"
                     isLoading = false
                 }
             } catch {
+                let description = error.localizedDescription
                 await MainActor.run {
-                    self.error = error.localizedDescription
+                    self.error = "Senden fehlgeschlagen: \(description)"
                     isLoading = false
                 }
             }
