@@ -1,0 +1,18 @@
+version: 2
+updates:
+  # GitHub Actions (CodeQL-Workflow)
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Swift/SPM (Firebase) fehlt bewusst: Dependabot braucht dafür
+  # ntfy-ios.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+  # im Repo, das per .gitignore ausgeschlossen ist. Sobald es eingecheckt ist,
+  # hier "package-ecosystem: swift" ergänzen.
