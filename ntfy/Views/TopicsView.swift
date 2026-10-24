@@ -120,6 +120,7 @@ struct TopicsView: View {
                         } label: {
                             Image(systemName: "checkmark.circle")
                         }
+                        .accessibilityLabel("Alle als gelesen markieren")
                     }
 
                     Menu {
@@ -137,6 +138,7 @@ struct TopicsView: View {
                     } label: {
                         Image(systemName: AppIcons.add)
                     }
+                    .accessibilityLabel("Hinzufügen")
                 }
             }
 
@@ -146,6 +148,7 @@ struct TopicsView: View {
                 } label: {
                     Image(systemName: AppIcons.settings)
                 }
+                .accessibilityLabel("Einstellungen")
             }
         }
         .overlay(alignment: .bottom) {
@@ -172,16 +175,16 @@ struct TopicsView: View {
     }
 
     private func deleteTopic(_ topic: Topic) {
-        ntfyService.unsubscribe(serverURL: topic.serverURL, topic: topic.name)
+        // Auswahl vor dem Loeschen aufheben, damit die Detailansicht nicht
+        // gegen ein geloeschtes Model gerendert wird
+        if selectedTopic?.id == topic.id {
+            selectedTopic = nil
+        }
 
-        // Unsubscribe from Firebase topic
-        FirebaseService.shared.unsubscribeFromTopic(serverURL: topic.serverURL, topic: topic.name)
-
+        // Gleicher Aufraeum-Pfad wie "Topic entfernen" in MessagesView
+        // (SSE/FCM, Benachrichtigungen, Nachrichten, DeletedMessage-Records, Badge, Widget)
         withAnimation {
-            if selectedTopic == topic {
-                selectedTopic = nil
-            }
-            modelContext.delete(topic)
+            TopicActions.remove(topic, context: modelContext, ntfyService: ntfyService)
         }
     }
 
@@ -192,12 +195,20 @@ struct TopicsView: View {
     }
 
     private func markTopicAsRead(_ topic: Topic) {
+        let topicName = topic.name
         if let messages = topic.messages {
             for message in messages where !message.isRead {
                 message.isRead = true
+                NotificationService.shared.removeNotification(withIdentifier: message.messageId)
             }
-            topic.unreadCount = 0
-            try? modelContext.save()
+        }
+        topic.unreadCount = 0
+        try? modelContext.save()
+        ntfyService.writeWidgetData(context: modelContext)
+
+        Task {
+            await NotificationService.shared.removeNotifications(forTopic: topicName)
+            await TopicActions.updateBadge(context: modelContext)
         }
     }
 
@@ -211,6 +222,7 @@ struct TopicsView: View {
             }
         }
         try? modelContext.save()
+        ntfyService.writeWidgetData(context: modelContext)
 
         // Clear notification badge
         Task {
