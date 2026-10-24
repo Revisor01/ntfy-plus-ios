@@ -7,20 +7,85 @@ und dieses Projekt folgt [Semantic Versioning 2.0.0](https://semver.org/lang/de/
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-25
+
+Abgleich mit ntfy-Server v2.28–v2.34 und der offiziellen iOS-App 1.8.0, plus Behebung
+der Befunde aus einem vollständigen Code-Audit. Build 7.
+
+### Added
+
+- **Geschützte Topics per Push**: Die Notification Service Extension löst `poll_request`-Pushes
+  auf und lädt den echten Nachrichteninhalt nach (`GET /<topic>/json?poll=1&id=…`, mit
+  Zugangsdaten aus der geteilten Keychain). Bisher erschien nur ein Platzhalter.
+- Push-Nachrichten werden in der App Group zwischengespeichert und beim Öffnen der App
+  in die Historie übernommen — auch dann, wenn der Server-Cache inzwischen abgelaufen ist
+- Nachrichten-Updates, „gelesen" und Löschen über `sequence_id` (ntfy-Update-/Clear-/Delete-API),
+  live per SSE und beim Nachladen
+- Priorität aus Pushes wird ausgewertet: 1 = still, 5 = zeitkritisch
+- Sichtschutz im App-Switcher, wenn die App-Sperre aktiv ist
+- App-Sperre mit Gerätecode-Fallback; Hinweis und Ausweg, wenn kein Code gesetzt ist
+- Bestätigungsdialog beim Löschen eines Servers
+- Prüfung von Topic-Namen (`A–Z a–z 0–9 - _`, max. 64 Zeichen), Server-URLs und doppelten Abos
+- Lokale Server im LAN per `http://` (`NSAllowsLocalNetworking`)
+- Eigener CI-Build-Workflow für Pull Requests, Dependabot für GitHub Actions
+
+### Changed
+
+- Senden über die ntfy-JSON-API statt HTTP-Header — Umlaute und Emoji in Titel und Tags
+  kommen korrekt an; Fehlermeldungen des Servers werden angezeigt; Limits für Titel (1 KB)
+  und Tags (512 B) werden vorab geprüft
+- SSE: eigene Verbindung ohne 5-Minuten-Abbruch, Reconnect mit `since=<letzte ID>` (ntfy ≥ 2.31)
+  und Duplikatfilter, Wiederholung mit Backoff bei 429/5xx statt dauerhaftem Abbruch,
+  gemeinsamer Verbindungsstatus über alle Topics
+- Antworten aus der Mitteilung gehen an den Server des Topics (vorher immer an den
+  Standard-Server) und werden auch im Hintergrund zuverlässig gesendet
+- „Als gelesen" aus der Mitteilung wirkt auch, wenn die App nicht geöffnet ist
+- FCM-Abos mit Referenzzählung: gleichnamige Topics auf verschiedenen Servern stören sich nicht mehr
+- Teilen über `ShareLink`; Datums-Formatter werden zwischengespeichert; Nachrichtenliste filtert
+  einmal pro Render statt pro Zeile
+- Bedienungshilfen: Beschriftungen für Symbol-Buttons, Farb- und Icon-Auswahl per VoiceOver bedienbar
+- Firebase iOS SDK 12.7 → 13.1.1 (benötigt Xcode 26.2+), `actions/checkout` v4 → v7
+
 ### Fixed
 
-- SwiftData: DB-Reset löscht jetzt alle Store-Dateien, Unsubscribe-Lifecycle korrigiert,
-  `markAllAsRead` markiert nur die gefilterten Nachrichten, Credential-Speicherung
-  funktioniert auch mit dem Default-Server
-- UI: Icon wird bei Farbwahl nicht mehr ungewollt zurückgesetzt, Bild-Recycling in
-  `CachedAsyncImage` durch URL-Tracking behoben, Widget-Deep-Links mit Sonderzeichen
-  werden prozent-kodiert, Hash-Overflow (`Int.min`) in Cache und Topic-Farbgenerierung behoben
-- Wirkungslose Custom-Sound-Auswahl aus den Topic-Einstellungen entfernt
+- **Datenverlust**: Ein `message_clear`-Event löschte die gesamte lokale Historie des Topics
+- `message_delete` vom Server wurde nie angewendet (falsche ID); Updates erzeugten Duplikate
+- Absturz auf dem iPad beim Teilen einer Nachricht und beim Abbestellen des angezeigten Topics
+- iPad: Detailansicht übernahm Titel/Suche des vorherigen Topics
+- Server-URL bearbeiten löschte Zugangsdaten unter der falschen URL; Topics verloren die Anmeldung
+- Neuer Server mit „Standard"-Schalter wurde sofort wieder Nicht-Standard
+- „Alle Nachrichten löschen" ließ Ungelesen-Zähler und Vorschau stehen
+- Onboarding: doppelter Server bei Doppeltipp, 5xx galt als erfolgreicher Test, Dark Mode unlesbar
+- Ungelesen-Zähler, Badge und Widget liefen bei Löschen/Gelesen auseinander
+- Polling-Fehler (400/429) wurden verschluckt
+- SwiftData: DB-Reset-Pfade, Unsubscribe-Lifecycle, `markAllAsRead`, Credential-Speicherung
+  mit Default-Server
+- UI: Icon-Reset bei Farbwahl, Bild-Recycling in `CachedAsyncImage`, Widget-Deep-Links mit
+  Sonderzeichen, Hash-Overflow (`Int.min`)
+- Wirkungslose Custom-Sound-Auswahl entfernt
+
+### Removed
+
+- Ungenutzte Background-Modes `fetch`/`processing`, `.provisional`-Autorisierung und toter
+  Code für lokale Benachrichtigungen (inkl. `.defaultCritical` ohne Entitlement)
 
 ### Security
 
+- Deep Links (`ntfy://topic/…`) hoben die Face-ID-Sperre auf — das Ziel wird jetzt erst nach
+  dem Entsperren geöffnet
+- Markdown-Links in Nachrichten und Tippen auf Mitteilungen öffnen nur noch `http`/`https`
+  (vorher z. B. auch `shortcuts://`, `tel:`)
+- `Authorization`-Header wird bei Redirects auf fremde Hosts entfernt
+- Topic-Namen werden in URLs kodiert, sodass sie den Pfad nicht verändern können
+- Keychain in geteilter Access-Group für App und Extension (`ThisDeviceOnly`), mit Migration
 - Strukturiertes Logging über `os.Logger` mit Privacy-Redaction statt `print()`
-- Keychain-Einträge auf `ThisDeviceOnly` umgestellt, inklusive Migration bestehender Einträge
+
+### Hinweise für den Build
+
+- Xcode 26.2 oder neuer (Firebase 13)
+- NSE-Target → *Signing & Capabilities* → **Keychain Sharing** mit Group `de.godsapp.ntfy` prüfen
+  (Entitlement ist eingetragen), ggf. Provisioning-Profile neu erzeugen
+- Nach dem Update die App einmal öffnen, damit die Topic→Server-Zuordnung für Pushes befüllt wird
 
 ## [2.0.0] - 2026-07-29
 
@@ -93,6 +158,7 @@ Erste Version.
 - Anzeige von App-Icons aus Nachrichten, Prioritäts-Badges, Dark Mode
 - Notification Service Extension für Badge-Zählung und Aufbereitung eingehender Pushes
 
-[Unreleased]: https://github.com/Revisor01/ntfy-plus-ios/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/Revisor01/ntfy-plus-ios/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/Revisor01/ntfy-plus-ios/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/Revisor01/ntfy-plus-ios/compare/v1.0...v2.0.0
 [1.0.0]: https://github.com/Revisor01/ntfy-plus-ios/releases/tag/v1.0
