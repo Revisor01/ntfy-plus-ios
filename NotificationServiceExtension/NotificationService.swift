@@ -1,3 +1,4 @@
+import Foundation
 import UserNotifications
 import os.log
 
@@ -56,6 +57,11 @@ class NotificationService: UNNotificationServiceExtension {
         let servers = topic.isEmpty ? [] : SharedStore.servers(for: topic)
 
         if payload.event == "poll_request" {
+            // Englischen Server-Platzhalter ("New message") eindeutschen, falls der Abruf scheitert
+            if content.body.isEmpty || content.body == "New message" {
+                content.body = "Neue Nachricht"
+            }
+
             guard let pollId = payload.pollId ?? payload.id, !topic.isEmpty, !servers.isEmpty else {
                 logger.error("🔔 poll_request ohne Topic/poll_id/bekannten Server — Platzhalter bleibt")
                 deliver()
