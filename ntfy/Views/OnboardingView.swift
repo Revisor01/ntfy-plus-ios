@@ -3,6 +3,7 @@ import SwiftData
 
 struct OnboardingView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme
     @Binding var isOnboardingComplete: Bool
 
     @State private var currentPage = 0
@@ -15,17 +16,38 @@ struct OnboardingView: View {
     @State private var isTestingConnection = false
     @State private var connectionError: String?
     @State private var connectionSuccess = false
+    /// Verhindert doppeltes Anlegen des Servers (Doppel-Tap → zwei Standard-Server)
+    @State private var isSaving = false
 
     // Brand colors from the icon
     private let brandBlue = Color(hex: "#4A6FA5")
     private let brandLightBlue = Color(hex: "#7EB6C7")
     private let brandBackground = Color(hex: "#E4EDF7")
 
+    /// Hintergrund fuer Karten/Eingabefelder: weiss im Light Mode, dunkelgrau im Dark Mode
+    private let fieldBackground = Color(uiColor: .secondarySystemGroupedBackground)
+
+    /// Verlauf passend zum Farbschema (vorher hart kodiertes Weiss → im Dark Mode unleserlich)
+    private var backgroundColors: [Color] {
+        if colorScheme == .dark {
+            return [brandBlue.opacity(0.35), Color(uiColor: .systemBackground)]
+        }
+        return [brandBackground, brandBackground.opacity(0.5), Color(uiColor: .systemBackground)]
+    }
+
+    private var normalizedServerURL: String {
+        serverURL.normalizedServerURL(addProtocolIfMissing: true)
+    }
+
+    private var isServerURLValid: Bool {
+        !serverURL.trimmed().isEmpty && normalizedServerURL.isValidURL
+    }
+
     var body: some View {
         ZStack {
             // Background gradient
             LinearGradient(
-                colors: [brandBackground, brandBackground.opacity(0.5), .white],
+                colors: backgroundColors,
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -154,7 +176,7 @@ struct OnboardingView: View {
             Spacer()
         }
         .padding(16)
-        .background(.white.opacity(0.8))
+        .background(fieldBackground.opacity(0.8))
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
@@ -196,7 +218,7 @@ struct OnboardingView: View {
                     TextField("https://push.godsapp.de", text: $serverURL)
                         .textFieldStyle(.plain)
                         .padding(16)
-                        .background(.white)
+                        .background(fieldBackground)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
@@ -205,6 +227,12 @@ struct OnboardingView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
+
+                    if !serverURL.trimmed().isEmpty && !isServerURLValid {
+                        Text("Bitte eine gültige Server-URL eingeben (http:// oder https://).")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
                 }
 
                 // Auth Toggle
@@ -223,7 +251,7 @@ struct OnboardingView: View {
                         .tint(brandBlue)
                 }
                 .padding(16)
-                .background(.white)
+                .background(fieldBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .padding(.horizontal, 24)
@@ -260,10 +288,10 @@ struct OnboardingView: View {
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
-                        .background(serverURL.isEmpty ? AnyShapeStyle(Color.gray) : AnyShapeStyle(brandBlue.gradient))
+                        .background(!isServerURLValid || isSaving ? AnyShapeStyle(Color.gray) : AnyShapeStyle(brandBlue.gradient))
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
-                .disabled(serverURL.isEmpty)
+                .disabled(!isServerURLValid || isSaving)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 16)
@@ -314,7 +342,7 @@ struct OnboardingView: View {
                         SecureField("tk_...", text: $token)
                             .textFieldStyle(.plain)
                             .padding(16)
-                            .background(.white)
+                            .background(fieldBackground)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
@@ -332,7 +360,7 @@ struct OnboardingView: View {
                             TextField("Benutzername", text: $username)
                                 .textFieldStyle(.plain)
                                 .padding(16)
-                                .background(.white)
+                                .background(fieldBackground)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
@@ -350,7 +378,7 @@ struct OnboardingView: View {
                             SecureField("Passwort", text: $password)
                                 .textFieldStyle(.plain)
                                 .padding(16)
-                                .background(.white)
+                                .background(fieldBackground)
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 12)
@@ -424,7 +452,7 @@ struct OnboardingView: View {
                     .background(isAuthValid ? AnyShapeStyle(brandBlue.gradient) : AnyShapeStyle(Color.gray.gradient))
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                 }
-                .disabled(!isAuthValid || isTestingConnection)
+                .disabled(!isAuthValid || isTestingConnection || connectionSuccess || isSaving)
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 16)
@@ -440,14 +468,15 @@ struct OnboardingView: View {
     }
 
     private func testAndFinish() {
+        guard !isTestingConnection, !isSaving else { return }
         isTestingConnection = true
         connectionError = nil
 
         Task {
             do {
-                let normalizedURL = serverURL.normalizedServerURL(addProtocolIfMissing: true)
+                let normalizedURL = normalizedServerURL
 
-                guard let testURL = URL(string: "\(normalizedURL)/test/json?poll=1") else {
+                guard normalizedURL.isValidURL, let testURL = URL(string: "\(normalizedURL)/test/json?poll=1") else {
                     await MainActor.run {
                         connectionError = "Ungültige Server-URL"
                         isTestingConnection = false
@@ -476,15 +505,25 @@ struct OnboardingView: View {
                         }
                         return
                     }
+                    if httpResponse.statusCode >= 500 {
+                        let statusCode = httpResponse.statusCode
+                        await MainActor.run {
+                            connectionError = "Serverfehler (\(statusCode))"
+                            isTestingConnection = false
+                        }
+                        return
+                    }
                 }
 
                 await MainActor.run {
                     connectionSuccess = true
                     isTestingConnection = false
+                }
 
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-                        finishOnboarding()
-                    }
+                // Kurz die Erfolgsmeldung zeigen, dann abschliessen
+                try? await Task.sleep(for: .milliseconds(800))
+                await MainActor.run {
+                    finishOnboarding()
                 }
             } catch {
                 await MainActor.run {
@@ -496,7 +535,15 @@ struct OnboardingView: View {
     }
 
     private func finishOnboarding() {
-        let normalizedURL = serverURL.normalizedServerURL(addProtocolIfMissing: true)
+        // Doppelte Ausfuehrung verhindern (Doppel-Tap / Timer + Tap)
+        guard !isSaving else { return }
+
+        let normalizedURL = normalizedServerURL
+        guard normalizedURL.isValidURL else {
+            connectionError = "Ungültige Server-URL"
+            return
+        }
+        isSaving = true
 
         if useAuth {
             if useToken {
@@ -506,14 +553,30 @@ struct OnboardingView: View {
             }
         }
 
-        let server = Server(
-            url: normalizedURL,
-            name: URL(string: normalizedURL)?.host ?? normalizedURL,
-            useAuth: useAuth,
-            username: useAuth && !useToken ? username : nil,
-            isDefault: true
-        )
-        modelContext.insert(server)
+        // Existiert der Server bereits (z.B. nach DB-Reset), ihn wiederverwenden
+        // statt einen zweiten Standard-Server anzulegen
+        let existingServers = (try? modelContext.fetch(FetchDescriptor<Server>())) ?? []
+        let targetServer: Server
+        if let existing = existingServers.first(where: { $0.url == normalizedURL }) {
+            existing.useAuth = useAuth
+            existing.username = useAuth && !useToken ? username : nil
+            targetServer = existing
+        } else {
+            let server = Server(
+                url: normalizedURL,
+                name: URL(string: normalizedURL)?.host ?? normalizedURL,
+                useAuth: useAuth,
+                username: useAuth && !useToken ? username : nil,
+                isDefault: true
+            )
+            modelContext.insert(server)
+            targetServer = server
+        }
+        let targetId = targetServer.id
+        for other in existingServers where other.id != targetId {
+            other.isDefault = false
+        }
+        targetServer.isDefault = true
         try? modelContext.save()
 
         AppSettings.defaultServerURL = normalizedURL

@@ -20,6 +20,7 @@ struct TopicRow: View {
                         Image(systemName: AppIcons.mute)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .accessibilityLabel("Stummgeschaltet")
                     }
 
                     Spacer()
@@ -55,6 +56,7 @@ struct TopicRow: View {
                             .padding(.vertical, 2)
                             .background(AppColors.primary)
                             .clipShape(Capsule())
+                            .accessibilityLabel("\(topic.unreadCount) ungelesen")
                     }
                 }
             }

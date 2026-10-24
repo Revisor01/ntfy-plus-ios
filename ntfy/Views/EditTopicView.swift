@@ -16,6 +16,12 @@ struct EditTopicView: View {
         .cyan, .blue, .indigo, .purple, .pink, .brown
     ]
 
+    /// VoiceOver-Namen passend zu `availableColors` (gleiche Reihenfolge)
+    private let colorNames: [String] = [
+        "Rot", "Orange", "Gelb", "Grün", "Mint", "Petrol",
+        "Cyan", "Blau", "Indigo", "Lila", "Pink", "Braun"
+    ]
+
     private let availableIcons: [String] = [
         "bell.fill", "envelope.fill", "message.fill", "bubble.left.fill",
         "server.rack", "desktopcomputer", "laptopcomputer", "iphone",
@@ -107,20 +113,27 @@ struct EditTopicView: View {
     private var colorSection: some View {
         Section("Farbe") {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
-                ForEach(availableColors, id: \.self) { color in
-                    Circle()
-                        .fill(color.gradient)
-                        .frame(width: 44, height: 44)
-                        .overlay {
-                            if colorMatches(color) {
-                                Image(systemName: "checkmark")
-                                    .font(.headline)
-                                    .foregroundStyle(.white)
+                ForEach(Array(availableColors.enumerated()), id: \.offset) { item in
+                    let color = item.element
+                    let isSelected = colorMatches(color)
+                    Button {
+                        selectedColor = color
+                    } label: {
+                        Circle()
+                            .fill(color.gradient)
+                            .frame(width: 44, height: 44)
+                            .overlay {
+                                if isSelected {
+                                    Image(systemName: "checkmark")
+                                        .font(.headline)
+                                        .foregroundStyle(.white)
+                                }
                             }
-                        }
-                        .onTapGesture {
-                            selectedColor = color
-                        }
+                    }
+                    // .plain: in Form-Zeilen sonst loest ein Tap alle Buttons der Zeile aus
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(item.offset < colorNames.count ? colorNames[item.offset] : "Farbe")
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
             .padding(.vertical, 8)
@@ -132,42 +145,50 @@ struct EditTopicView: View {
         Section("Icon (optional)") {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
                 // No icon option
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.secondary.opacity(0.2))
-                        .frame(width: 44, height: 44)
-
-                    Image(systemName: "xmark")
-                        .foregroundStyle(.secondary)
-                }
-                .overlay {
-                    if selectedIcon == nil {
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(selectedColor, lineWidth: 2)
-                    }
-                }
-                .onTapGesture {
+                Button {
                     selectedIcon = nil
-                }
-
-                ForEach(availableIcons, id: \.self) { icon in
+                } label: {
                     ZStack {
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(selectedColor.gradient)
+                            .fill(Color.secondary.opacity(0.2))
                             .frame(width: 44, height: 44)
 
-                        Image(systemName: icon)
-                            .foregroundStyle(.white)
+                        Image(systemName: "xmark")
+                            .foregroundStyle(.secondary)
                     }
                     .overlay {
-                        if selectedIcon == icon {
+                        if selectedIcon == nil {
                             RoundedRectangle(cornerRadius: 8)
-                                .stroke(.white, lineWidth: 2)
+                                .stroke(selectedColor, lineWidth: 2)
                         }
                     }
-                    .onTapGesture {
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Kein Icon")
+                .accessibilityAddTraits(selectedIcon == nil ? .isSelected : [])
+
+                ForEach(availableIcons, id: \.self) { icon in
+                    Button {
                         selectedIcon = icon
+                    } label: {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(selectedColor.gradient)
+                                .frame(width: 44, height: 44)
+
+                            Image(systemName: icon)
+                                .foregroundStyle(.white)
+                        }
+                        .overlay {
+                            if selectedIcon == icon {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(.white, lineWidth: 2)
+                            }
+                        }
                     }
+                    // .plain: in Form-Zeilen sonst loest ein Tap alle Buttons der Zeile aus
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(selectedIcon == icon ? .isSelected : [])
                 }
             }
             .padding(.vertical, 8)
