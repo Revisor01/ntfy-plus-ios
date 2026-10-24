@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>AppIdentifierPrefix</key>
+	<string>$(AppIdentifierPrefix)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>FirebaseAppDelegateProxyEnabled</key>
@@ -10,16 +12,12 @@
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
 		<false/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
 	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
-		<string>fetch</string>
-		<string>processing</string>
 		<string>remote-notification</string>
-	</array>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>de.godsapp.ntfy.refresh</string>
 	</array>
 	<key>NSFaceIDUsageDescription</key>
 	<string>ntfy+ verwendet Face ID um den App-Inhalt zu schützen.</string>

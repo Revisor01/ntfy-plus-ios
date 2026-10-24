@@ -1,5 +1,6 @@
 import UIKit
 import UserNotifications
+import SwiftData
 #if canImport(FirebaseCore)
 import FirebaseCore
 import FirebaseMessaging
@@ -21,13 +22,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Set notification delegate
         UNUserNotificationCenter.current().delegate = self
 
-        // Request notification authorization
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+        // Request notification authorization — einziger Pfad ueber NotificationService
+        // (gleiche Optionen wie ContentView/SettingsView, kein konkurrierendes .provisional)
+        Task { @MainActor in
+            let granted = await NotificationService.shared.requestAuthorization()
             if granted {
                 AppLog.app.info("Notification permission granted")
-            }
-            if let error = error {
-                AppLog.app.error("Notification authorization error: \(error.localizedDescription, privacy: .public)")
             }
         }
 
@@ -83,6 +83,13 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             willPresent notification: UNNotification,
                                             withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        // Von der NSE abgelegte Nachricht direkt in SwiftData uebernehmen
+        Task { @MainActor in
+            if let container = SharedModel.container {
+                PendingMessageImporter.importPendingMessages(context: container.mainContext)
+            }
+        }
+
         // Show the notification as-is (subtitle already removed by extension)
         completionHandler([.banner, .sound, .badge])
     }
@@ -91,78 +98,65 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
+        // Nur Sendable-Werte in die MainActor-Tasks mitnehmen
         let userInfo = response.notification.request.content.userInfo
+        let notificationIdentifier = response.notification.request.identifier
+        let completion = CompletionHandlerBox(completionHandler)
+
+        let topicName = userInfo["topic"] as? String
+        let serverURLHint = userInfo["serverURL"] as? String
+        // userInfo key "messageId" for local notifications, "id" for push
+        let messageId = (userInfo["messageId"] as? String) ?? (userInfo["id"] as? String)
+        let clickString = userInfo["click"] as? String
 
         switch response.actionIdentifier {
         case "MARK_READ":
-            // userInfo key "messageId" for local notifications, "id" for push
-            let messageId = (userInfo["messageId"] as? String) ?? (userInfo["id"] as? String)
-            if let messageId = messageId {
-                Task { @MainActor in
-                    // 1. Badge via shared file dekrementieren
-                    if let url = FileManager.default
-                        .containerURL(forSecurityApplicationGroupIdentifier: "group.de.godsapp.ntfy")?
-                        .appendingPathComponent("badge_count.txt") {
-                        let current = (try? String(contentsOf: url, encoding: .utf8))
-                            .flatMap { Int($0.trimmingCharacters(in: .whitespacesAndNewlines)) } ?? 0
-                        let newCount = max(0, current - 1)
-                        try? String(newCount).write(to: url, atomically: true, encoding: .utf8)
-                        await NotificationService.shared.setBadgeCount(newCount)
-                    }
-                    // 2. Notification entfernen
-                    NotificationService.shared.removeNotification(withIdentifier: messageId)
-                    // 3. SwiftData-Update delegieren
-                    NotificationCenter.default.post(
-                        name: .markMessageRead,
-                        object: nil,
-                        userInfo: ["messageId": messageId]
-                    )
-                }
+            Task { @MainActor in
+                await AppDelegate.markMessageRead(messageId: messageId, notificationIdentifier: notificationIdentifier)
+                completion.call()
             }
 
         case "REPLY":
-            if let textResponse = response as? UNTextInputNotificationResponse,
-               let topicName = userInfo["topic"] as? String {
-                let replyText = textResponse.userText
-                Task { @MainActor in
-                    let serverURL = AppSettings.defaultServerURL
-                    let token = KeychainManager.shared.loadToken(serverURL: serverURL)
-                    let credentials = KeychainManager.shared.loadCredentials(serverURL: serverURL)
-                    try? await NtfyService.shared.publish(
-                        serverURL: serverURL,
-                        topic: topicName,
-                        message: replyText,
-                        username: credentials?.username,
-                        password: credentials?.password,
-                        token: token
-                    )
-                }
+            guard let textResponse = response as? UNTextInputNotificationResponse,
+                  let topicName = topicName, !topicName.isEmpty else {
+                completion.call()
+                return
+            }
+            let replyText = textResponse.userText
+            guard !replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                completion.call()
+                return
+            }
+            // completionHandler erst nach abgeschlossenem Publish aufrufen
+            Task { @MainActor in
+                await AppDelegate.sendReply(text: replyText, topicName: topicName, serverURLHint: serverURLHint)
+                completion.call()
             }
 
         case "OPEN_URL":
             // URL aus userInfo["url"] lesen (ntfy action-spezifisches Feld)
             // Fallback auf userInfo["click"] falls kein "url"-Key vorhanden
-            let urlString = (userInfo["url"] as? String) ?? (userInfo["click"] as? String)
-            if let urlString = urlString, let url = URL(string: urlString) {
-                AppLog.app.info("🔗 OPEN_URL action: \(urlString, privacy: .private)")
+            let urlString = (userInfo["url"] as? String) ?? clickString
+            if let url = AppDelegate.safeWebURL(from: urlString) {
+                AppLog.app.info("🔗 OPEN_URL action: \(url.absoluteString, privacy: .private)")
                 Task { @MainActor in
                     UIApplication.shared.open(url)
                 }
             }
+            completion.call()
 
         default:
             // Normal tap (UNNotificationDefaultActionIdentifier) — open app and navigate
             // Handle click URL if present (ntfy v2.16+)
-            if let clickURLString = userInfo["click"] as? String,
-               let clickURL = URL(string: clickURLString) {
-                AppLog.app.info("🔗 Opening click URL: \(clickURLString, privacy: .private)")
+            if let clickURL = AppDelegate.safeWebURL(from: clickString) {
+                AppLog.app.info("🔗 Opening click URL: \(clickURL.absoluteString, privacy: .private)")
                 Task { @MainActor in
                     UIApplication.shared.open(clickURL)
                 }
             }
 
             // Navigate to topic if available
-            if let topic = userInfo["topic"] as? String {
+            if let topic = topicName {
                 Task { @MainActor in
                     NotificationCenter.default.post(
                         name: .navigateToTopic,
@@ -171,9 +165,166 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
                     )
                 }
             }
+            completion.call()
+        }
+    }
+}
+
+// MARK: - Notification Action Handling
+
+extension AppDelegate {
+    /// Nur sichere Web-Schemes oeffnen (gleiche Regel wie MessageRow.openURL) —
+    /// verhindert javascript:/data:/file:/Custom-Schemes aus fremden Nachrichten.
+    nonisolated static func safeWebURL(from string: String?) -> URL? {
+        guard let string = string, !string.isEmpty else { return nil }
+        guard let url = URL(string: string),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else {
+            AppLog.app.error("❌ Notification-URL mit unsicherem Schema abgelehnt")
+            return nil
+        }
+        return url
+    }
+
+    /// MARK_READ: SwiftData direkt aktualisieren (funktioniert auch, wenn die UI nicht
+    /// geladen ist), danach Badge aus den ungelesenen Nachrichten neu setzen.
+    @MainActor
+    static func markMessageRead(messageId: String?, notificationIdentifier: String) async {
+        NotificationService.shared.removeNotification(withIdentifier: notificationIdentifier)
+
+        guard let messageId = messageId else { return }
+        NotificationService.shared.removeNotification(withIdentifier: messageId)
+
+        guard let container = try? SharedModel.makeContainer() else {
+            // Fallback: alter Weg ueber ContentView
+            AppLog.app.error("MARK_READ: ModelContainer nicht verfuegbar — delegiere an UI")
+            NotificationCenter.default.post(
+                name: .markMessageRead,
+                object: nil,
+                userInfo: ["messageId": messageId]
+            )
+            return
+        }
+        let context = container.mainContext
+
+        // Nachricht ggf. erst aus dem NSE-Ablageordner uebernehmen
+        PendingMessageImporter.importPendingMessages(context: context)
+
+        let predicate = #Predicate<StoredMessage> { $0.messageId == messageId }
+        let descriptor = FetchDescriptor(predicate: predicate)
+        if let message = (try? context.fetch(descriptor))?.first, !message.isRead {
+            message.isRead = true
+            if let topic = message.topic {
+                topic.unreadCount = max(0, topic.unreadCount - 1)
+            }
+            try? context.save()
         }
 
-        completionHandler()
+        await NotificationService.shared.syncBadgeWithUnreadCount(context: context)
+    }
+
+    /// REPLY: an den Server des Topics (nicht den Default-Server) mit dessen
+    /// Zugangsdaten publizieren. Laeuft in einem Background-Task; Fehler werden
+    /// geloggt und per lokaler Notification gemeldet.
+    @MainActor
+    static func sendReply(text: String, topicName: String, serverURLHint: String?) async {
+        let backgroundTask = BackgroundTaskToken()
+        backgroundTask.identifier = UIApplication.shared.beginBackgroundTask(withName: "ntfy-reply") {
+            MainActor.assumeIsolated {
+                backgroundTask.end()
+            }
+        }
+        defer { backgroundTask.end() }
+
+        let serverURL = resolveServerURL(topicName: topicName, hint: serverURLHint)
+        let token = KeychainManager.shared.loadToken(serverURL: serverURL)
+        let credentials = KeychainManager.shared.loadCredentials(serverURL: serverURL)
+
+        do {
+            try await NtfyService.shared.publish(
+                serverURL: serverURL,
+                topic: topicName,
+                message: text,
+                username: credentials?.username,
+                password: credentials?.password,
+                token: token
+            )
+            AppLog.app.info("↩️ Antwort an \(topicName, privacy: .private) gesendet")
+        } catch {
+            AppLog.app.error("↩️ Antwort an \(topicName, privacy: .private) fehlgeschlagen: \(error.localizedDescription, privacy: .public)")
+            await postReplyFailedNotification(topicName: topicName)
+        }
+    }
+
+    /// Server des Topics: userInfo["serverURL"] (von der NSE gesetzt) → eindeutige
+    /// Topic→Server-Map → SwiftData-Topic → erster Map-Eintrag → Default-Server.
+    @MainActor
+    private static func resolveServerURL(topicName: String, hint: String?) -> String {
+        if let hint = hint, !hint.isEmpty {
+            return hint
+        }
+
+        let mappedServers = TopicServerMap.servers(for: topicName)
+        if mappedServers.count == 1, let server = mappedServers.first {
+            return server
+        }
+
+        if let container = try? SharedModel.makeContainer() {
+            let predicate = #Predicate<Topic> { $0.name == topicName }
+            let descriptor = FetchDescriptor(predicate: predicate)
+            if let topic = (try? container.mainContext.fetch(descriptor))?.first {
+                return topic.serverURL
+            }
+        }
+
+        return mappedServers.first ?? AppSettings.defaultServerURL
+    }
+
+    @MainActor
+    private static func postReplyFailedNotification(topicName: String) async {
+        let content = UNMutableNotificationContent()
+        content.title = "Antwort nicht gesendet"
+        content.body = "Deine Antwort an „\(topicName)“ konnte nicht zugestellt werden."
+        content.threadIdentifier = topicName
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: "reply-failed-\(UUID().uuidString)",
+            content: content,
+            trigger: nil
+        )
+        do {
+            try await UNUserNotificationCenter.current().add(request)
+        } catch {
+            AppLog.app.error("Fehler-Notification konnte nicht angezeigt werden: \(error.localizedDescription, privacy: .public)")
+        }
+    }
+}
+
+/// Reicht den nicht-Sendable completionHandler der Delegate-Methode in MainActor-Tasks
+/// weiter. UIKit erlaubt den Aufruf von beliebigen Threads; hier erfolgt er auf Main.
+private struct CompletionHandlerBox: @unchecked Sendable {
+    private let handler: () -> Void
+
+    init(_ handler: @escaping () -> Void) {
+        self.handler = handler
+    }
+
+    func call() {
+        handler()
+    }
+}
+
+/// Haelt die Background-Task-ID, damit Expiration-Handler und regulaeres Ende
+/// sie genau einmal beenden.
+@MainActor
+private final class BackgroundTaskToken {
+    var identifier: UIBackgroundTaskIdentifier = .invalid
+
+    func end() {
+        guard identifier != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(identifier)
+        identifier = .invalid
     }
 }
 
