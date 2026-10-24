@@ -40,6 +40,7 @@ struct MessageRow: View {
                         Image(systemName: "star.fill")
                             .font(.caption)
                             .foregroundStyle(.yellow)
+                            .accessibilityLabel("Favorit")
                     }
 
                     // Unread indicator
@@ -47,6 +48,7 @@ struct MessageRow: View {
                         Circle()
                             .fill(AppColors.primary)
                             .frame(width: 8, height: 8)
+                            .accessibilityLabel("Ungelesen")
                     }
                 }
 
@@ -106,15 +108,16 @@ struct MessageRow: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
+                    .accessibilityLabel("Nachricht kopieren")
 
-                    // Share button
-                    Button {
-                        shareMessage()
-                    } label: {
+                    // Share button — ShareLink statt UIActivityViewController:
+                    // SwiftUI kuemmert sich um den Popover-Anker (sonst Crash auf dem iPad)
+                    ShareLink(item: shareText) {
                         Image(systemName: AppIcons.share)
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
+                    .accessibilityLabel("Nachricht teilen")
 
                     Spacer()
 
@@ -151,9 +154,7 @@ struct MessageRow: View {
                 Label("Kopieren", systemImage: AppIcons.copy)
             }
 
-            Button {
-                shareMessage()
-            } label: {
+            ShareLink(item: shareText) {
                 Label("Teilen", systemImage: AppIcons.share)
             }
 
@@ -165,6 +166,15 @@ struct MessageRow: View {
                 }
             }
         }
+        // Alle Links in der Zeile (v.a. Markdown-Links im Nachrichtentext) laufen
+        // ueber diese Aktion — nur http/https werden geoeffnet, alles andere verworfen.
+        .environment(\.openURL, OpenURLAction { url in
+            if url.isSafeWebURL {
+                return .systemAction
+            }
+            AppLog.ui.error("❌ openURL: unsicheres Schema abgelehnt: \(url.scheme ?? "nil", privacy: .public)")
+            return .discarded
+        })
         .confirmationDialog(
             "HTTP-Aktion ausführen?",
             isPresented: $showingHTTPConfirmation,
@@ -387,8 +397,9 @@ struct MessageRow: View {
     @ViewBuilder
     private func actionButtonsView(actions: [StoredAction]) -> some View {
         HStack(spacing: AppSpacing.sm) {
-            ForEach(actions.prefix(3), id: \.label) { action in
-                actionButton(action)
+            // Labels sind nicht zwingend eindeutig — Index als stabile ID verwenden
+            ForEach(Array(actions.prefix(3).enumerated()), id: \.offset) { item in
+                actionButton(item.element)
             }
         }
     }
@@ -513,8 +524,7 @@ struct MessageRow: View {
     private func openURL(_ urlString: String) {
         guard let url = URL(string: urlString) else { return }
         // Nur sichere Web-Schemes oeffnen — verhindert javascript:/data:/file: aus fremden Nachrichten
-        let allowedSchemes = ["http", "https"]
-        guard let scheme = url.scheme?.lowercased(), allowedSchemes.contains(scheme) else {
+        guard url.isSafeWebURL else {
             AppLog.ui.error("❌ openURL: unsicheres Schema abgelehnt: \(url.scheme ?? "nil", privacy: .public)")
             return
         }
@@ -522,14 +532,7 @@ struct MessageRow: View {
     }
 
     private func copyMessage() {
-        var text = ""
-        if let title = message.title {
-            text += "\(title)\n"
-        }
-        if let messageText = message.message {
-            text += messageText
-        }
-        UIPasteboard.general.string = text
+        UIPasteboard.general.string = shareText
 
         // Haptic feedback
         if AppSettings.hapticFeedback {
@@ -538,7 +541,8 @@ struct MessageRow: View {
         }
     }
 
-    private func shareMessage() {
+    /// Text fuer Teilen (Titel + Nachricht)
+    private var shareText: String {
         var text = ""
         if let title = message.title {
             text += "\(title)\n"
@@ -546,16 +550,7 @@ struct MessageRow: View {
         if let messageText = message.message {
             text += messageText
         }
-
-        let activityVC = UIActivityViewController(
-            activityItems: [text],
-            applicationActivities: nil
-        )
-
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootViewController = windowScene.windows.first?.rootViewController {
-            rootViewController.present(activityVC, animated: true)
-        }
+        return text
     }
 }
 
