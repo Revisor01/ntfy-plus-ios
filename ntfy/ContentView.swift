@@ -193,33 +193,22 @@ struct ContentView: View {
                 password: credentials?.password,
                 token: token,
                 onMessage: { @MainActor message in
+                    // Topic kann inzwischen geloescht sein — dann nichts mehr schreiben
+                    guard !topicRef.isDeleted, topicRef.modelContext != nil else { return }
                     ntfyService.storeMessages(for: topicRef, messages: [message], context: context)
                     ntfyService.writeWidgetData(context: context)
                 },
-                onDelete: { @MainActor deletedMessageId in
-                    // Find and delete the message locally when server sends delete event
-                    let predicate = #Predicate<StoredMessage> { $0.messageId == deletedMessageId }
-                    let descriptor = FetchDescriptor(predicate: predicate)
-                    if let messages = try? context.fetch(descriptor) {
-                        for message in messages {
-                            NotificationService.shared.removeNotification(withIdentifier: message.messageId)
-                            context.delete(message)
-                        }
-                        try? context.save()
-                    }
+                onDelete: { @MainActor event in
+                    // message_delete: Ziel ueber sequence_id — Nachricht aus DB und Mitteilungszentrale entfernen
+                    guard !topicRef.isDeleted, topicRef.modelContext != nil else { return }
+                    ntfyService.storeMessages(for: topicRef, messages: [event], context: context)
+                    ntfyService.writeWidgetData(context: context)
                 },
-                onClear: { @MainActor in
-                    // Clear all messages for this topic when server sends clear event
-                    let topicId = topicRef.id
-                    let predicate = #Predicate<StoredMessage> { $0.topic?.id == topicId }
-                    let descriptor = FetchDescriptor(predicate: predicate)
-                    if let messages = try? context.fetch(descriptor) {
-                        for message in messages {
-                            NotificationService.shared.removeNotification(withIdentifier: message.messageId)
-                            context.delete(message)
-                        }
-                        try? context.save()
-                    }
+                onClear: { @MainActor event in
+                    // message_clear: Ziel ueber sequence_id — nur als gelesen markieren + Mitteilung entfernen
+                    guard !topicRef.isDeleted, topicRef.modelContext != nil else { return }
+                    ntfyService.storeMessages(for: topicRef, messages: [event], context: context)
+                    ntfyService.writeWidgetData(context: context)
                 }
             )
         }
