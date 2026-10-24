@@ -8,5 +8,9 @@
 	<array>
 		<string>group.de.godsapp.ntfy</string>
 	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)de.godsapp.ntfy</string>
+	</array>
 </dict>
 </plist>

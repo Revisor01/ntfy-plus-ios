@@ -6,7 +6,28 @@ final class KeychainManager: Sendable {
 
     private let service = "de.godsapp.ntfy"
 
-    private init() {}
+    /// Explizite, mit der NotificationServiceExtension geteilte Keychain-Access-Group
+    /// ("<TeamID>.de.godsapp.ntfy"). Der Team-Prefix kommt zur Laufzeit aus dem
+    /// Info.plist-Key `AppIdentifierPrefix` (= `$(AppIdentifierPrefix)`, inkl. Punkt).
+    /// Fehlt der Key (z.B. unsignierter Simulator-Build), wird ohne Access-Group
+    /// gearbeitet — dann landet alles wie bisher in der Default-Group der App.
+    ///
+    /// Bestehende Items wurden ohne Access-Group gespeichert und liegen damit in der
+    /// Default-Group = erster Eintrag von `keychain-access-groups` = genau diese Group.
+    /// Sie bleiben also mit expliziter Group lesbar; zur Sicherheit faellt `load`
+    /// trotzdem auf eine Abfrage ohne Group zurueck.
+    let accessGroup: String?
+
+    private init() {
+        if let prefix = Bundle.main.object(forInfoDictionaryKey: "AppIdentifierPrefix") as? String,
+           !prefix.isEmpty,
+           !prefix.contains("$(") {
+            let normalizedPrefix = prefix.hasSuffix(".") ? prefix : prefix + "."
+            accessGroup = normalizedPrefix + "de.godsapp.ntfy"
+        } else {
+            accessGroup = nil
+        }
+    }
 
     // MARK: - Save
 
@@ -18,15 +39,25 @@ final class KeychainManager: Sendable {
         // Delete existing item first
         try? delete(key: key)
 
-        let query: [String: Any] = [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
+        if let accessGroup {
+            query[kSecAttrAccessGroup as String] = accessGroup
+        }
 
-        let status = SecItemAdd(query as CFDictionary, nil)
+        var status = SecItemAdd(query as CFDictionary, nil)
+
+        // Sicherheitsnetz: passt die Group nicht zu den Entitlements (falscher Prefix),
+        // lieber ohne explizite Group speichern als den Wert zu verlieren.
+        if status == errSecMissingEntitlement, accessGroup != nil {
+            query.removeValue(forKey: kSecAttrAccessGroup as String)
+            status = SecItemAdd(query as CFDictionary, nil)
+        }
 
         guard status == errSecSuccess else {
             throw KeychainError.saveFailed(status)
@@ -36,7 +67,7 @@ final class KeychainManager: Sendable {
     // MARK: - Load
 
     func load(key: String) throws -> String? {
-        let query: [String: Any] = [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
@@ -44,9 +75,22 @@ final class KeychainManager: Sendable {
             kSecReturnAttributes as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
+        if let accessGroup {
+            query[kSecAttrAccessGroup as String] = accessGroup
+        }
 
         var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        var status = SecItemCopyMatching(query as CFDictionary, &result)
+        var foundOutsideAccessGroup = false
+
+        // Fallback: Altbestand ausserhalb der expliziten Group (sollte nicht vorkommen,
+        // da die Default-Group identisch ist) — ohne Group sucht iOS in allen Groups der App.
+        if status == errSecItemNotFound, accessGroup != nil {
+            query.removeValue(forKey: kSecAttrAccessGroup as String)
+            result = nil
+            status = SecItemCopyMatching(query as CFDictionary, &result)
+            foundOutsideAccessGroup = (status == errSecSuccess)
+        }
 
         switch status {
         case errSecSuccess:
@@ -54,6 +98,23 @@ final class KeychainManager: Sendable {
                   let data = attributes[kSecValueData as String] as? Data,
                   let string = String(data: data, encoding: .utf8) else {
                 throw KeychainError.decodingFailed
+            }
+
+            // Item lag nicht in der geteilten Group → per SecItemUpdate dorthin umziehen,
+            // damit die NotificationServiceExtension es lesen kann. Update statt
+            // Delete+Add: schlaegt es fehl, bleibt das Item unveraendert erhalten.
+            if foundOutsideAccessGroup, let accessGroup {
+                let moveQuery: [String: Any] = [
+                    kSecClass as String: kSecClassGenericPassword,
+                    kSecAttrService as String: service,
+                    kSecAttrAccount as String: key
+                ]
+                let moveAttributes: [String: Any] = [
+                    kSecAttrAccessGroup as String: accessGroup,
+                    kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+                ]
+                _ = SecItemUpdate(moveQuery as CFDictionary, moveAttributes as CFDictionary)
+                return string
             }
 
             // Transparente Migration: Items mit dem alten Accessibility-Attribut
