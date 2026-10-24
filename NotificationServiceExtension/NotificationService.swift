@@ -8,63 +8,155 @@ class NotificationService: UNNotificationServiceExtension {
     var contentHandler: ((UNNotificationContent) -> Void)?
     var bestAttemptContent: UNMutableNotificationContent?
 
-    // File-based badge counter (works without App Group entitlement issues)
-    private var badgeFileURL: URL? {
-        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.de.godsapp.ntfy")?
-            .appendingPathComponent("badge_count.txt")
-    }
+    /// Schuetzt contentHandler-Aufruf und Content-Mutation gegen den Wettlauf zwischen
+    /// Netzwerk-Callback (poll_request) und serviceExtensionTimeWillExpire.
+    private let deliveryLock = NSLock()
+    private var hasDelivered = false
+    private var pollFetcher: PollRequestFetcher?
 
-    private func getBadgeCount() -> Int {
-        guard let url = badgeFileURL,
-              let content = try? String(contentsOf: url, encoding: .utf8),
-              let count = Int(content.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-            return 0
-        }
-        return count
-    }
-
-    private func setBadgeCount(_ count: Int) {
-        guard let url = badgeFileURL else { return }
-        try? String(count).write(to: url, atomically: true, encoding: .utf8)
-    }
+    /// Die NSE hat ca. 30 s; danach greift serviceExtensionTimeWillExpire.
+    private let pollBudget: TimeInterval = 22
 
     override func didReceive(_ request: UNNotificationRequest, withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
-        logger.info("🔔 NotificationServiceExtension didReceive called!")
+        logger.info("🔔 NotificationServiceExtension didReceive called")
 
         self.contentHandler = contentHandler
-        bestAttemptContent = (request.content.mutableCopy() as? UNMutableNotificationContent)
+        guard let content = request.content.mutableCopy() as? UNMutableNotificationContent else {
+            logger.error("🔔 Could not create mutable content")
+            hasDelivered = true
+            contentHandler(request.content)
+            return
+        }
+        bestAttemptContent = content
 
-        if let bestAttemptContent = bestAttemptContent {
-            logger.info("🔔 Processing notification: \(bestAttemptContent.title)")
+        let payload = PushPayload(userInfo: request.content.userInfo)
+        let topic = payload.topic
 
-            // Clear subtitle (this removes the topic)
-            bestAttemptContent.subtitle = ""
+        // Subtitle (Topic) entfernen
+        content.subtitle = ""
 
-            // Category für interaktive Actions (Als gelesen / Antworten / Link öffnen)
-            // auch bei Push-Notifications sichtbar machen — sonst nur bei lokalen Notifications
-            bestAttemptContent.categoryIdentifier = "NTFY_MESSAGE"
+        // Category für interaktive Actions (Als gelesen / Antworten / Link öffnen)
+        // auch bei Push-Notifications sichtbar machen — sonst nur bei lokalen Notifications
+        content.categoryIdentifier = "NTFY_MESSAGE"
 
-            // Thread identifier für Topic-Gruppierung (GROUP-01)
-            if let topic = request.content.userInfo["topic"] as? String, !topic.isEmpty {
-                bestAttemptContent.threadIdentifier = topic
+        // Thread identifier für Topic-Gruppierung (GROUP-01)
+        if !topic.isEmpty {
+            content.threadIdentifier = topic
+            if content.title.isEmpty {
+                content.title = topic
+            }
+        }
+
+        PriorityStyle.apply(priority: payload.priority, to: content)
+
+        // Badge aus dem geteilten Zaehler (die App schreibt dort den massgeblichen Stand)
+        let newBadge = SharedStore.incrementBadgeCount()
+        content.badge = NSNumber(value: newBadge)
+
+        let servers = topic.isEmpty ? [] : SharedStore.servers(for: topic)
+
+        if payload.event == "poll_request" {
+            guard let pollId = payload.pollId ?? payload.id, !topic.isEmpty, !servers.isEmpty else {
+                logger.error("🔔 poll_request ohne Topic/poll_id/bekannten Server — Platzhalter bleibt")
+                deliver()
+                return
             }
 
-            // Increment badge count
-            let newBadge = getBadgeCount() + 1
-            setBadgeCount(newBadge)
-            bestAttemptContent.badge = NSNumber(value: newBadge)
-
-            logger.info("🔔 Removed subtitle, badge: \(newBadge), delivering notification")
-            contentHandler(bestAttemptContent)
-        } else {
-            logger.error("🔔 Could not create mutable content")
-            contentHandler(request.content)
+            let fetcher = PollRequestFetcher()
+            pollFetcher = fetcher
+            fetcher.fetch(topic: topic,
+                          pollId: pollId,
+                          servers: servers,
+                          deadline: Date().addingTimeInterval(pollBudget)) { [weak self] result in
+                guard let self else { return }
+                guard let result else {
+                    logger.error("🔔 poll_request konnte nicht aufgeloest werden — Platzhalter bleibt")
+                    self.deliver()
+                    return
+                }
+                // Auch wenn die Zeit bereits abgelaufen ist: App bekommt die Nachricht trotzdem
+                SharedStore.writePendingMessage(result.message, serverURL: result.serverURL)
+                self.deliver { content in
+                    NotificationService.applyResolvedMessage(result.message, serverURL: result.serverURL, topic: topic, to: content)
+                }
+                logger.info("🔔 poll_request aufgeloest, badge: \(newBadge, privacy: .public)")
+            }
+            return
         }
+
+        // Normaler "message"-Push: Inhalt ist bereits im Payload
+        let serverURL = servers.count == 1 ? servers.first : nil
+        if let message = payload.messageDictionary() {
+            SharedStore.writePendingMessage(message, serverURL: serverURL)
+        }
+        if let serverURL {
+            content.userInfo["serverURL"] = serverURL
+        }
+
+        logger.info("🔔 Removed subtitle, badge: \(newBadge, privacy: .public), delivering notification")
+        deliver()
     }
 
     override func serviceExtensionTimeWillExpire() {
-        if let contentHandler = contentHandler, let bestAttemptContent = bestAttemptContent {
-            contentHandler(bestAttemptContent)
+        logger.error("🔔 serviceExtensionTimeWillExpire — liefere best attempt")
+        pollFetcher?.cancel()
+        deliver()
+    }
+
+    // MARK: - Delivery
+
+    /// Ruft den contentHandler genau einmal auf; `update` mutiert den Content vorher
+    /// unter demselben Lock (nur wenn noch nicht ausgeliefert).
+    private func deliver(_ update: ((UNMutableNotificationContent) -> Void)? = nil) {
+        deliveryLock.lock()
+        guard !hasDelivered, let handler = contentHandler, let content = bestAttemptContent else {
+            deliveryLock.unlock()
+            return
         }
+        hasDelivered = true
+        update?(content)
+        deliveryLock.unlock()
+        handler(content)
+    }
+
+    /// Ersetzt den poll_request-Platzhalter durch die abgerufene Nachricht und setzt
+    /// die userInfo-Felder, die AppDelegate (Tap, MARK_READ, REPLY, OPEN_URL) erwartet.
+    private static func applyResolvedMessage(_ message: [String: Any],
+                                             serverURL: String,
+                                             topic: String,
+                                             to content: UNMutableNotificationContent) {
+        let title = (message["title"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? topic
+        content.title = title
+
+        if let body = message["message"] as? String, !body.isEmpty {
+            content.body = body
+        } else if let attachment = message["attachment"] as? [String: Any],
+                  let name = attachment["name"] as? String, !name.isEmpty {
+            content.body = name
+        }
+
+        let priority = (message["priority"] as? NSNumber)?.intValue
+        PriorityStyle.apply(priority: priority, to: content)
+
+        var userInfo = content.userInfo
+        userInfo["event"] = "message"
+        userInfo["topic"] = topic
+        userInfo["serverURL"] = serverURL
+        if let id = message["id"] as? String {
+            userInfo["id"] = id
+        }
+        if let click = message["click"] as? String, !click.isEmpty {
+            userInfo["click"] = click
+        }
+        if let messageTitle = message["title"] as? String {
+            userInfo["title"] = messageTitle
+        }
+        if let body = message["message"] as? String {
+            userInfo["message"] = body
+        }
+        if let priority {
+            userInfo["priority"] = String(priority)
+        }
+        content.userInfo = userInfo
     }
 }
