@@ -46,7 +46,7 @@ final class KeychainManager: Sendable {
             kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         ]
-        if let accessGroup {
+        if let accessGroup = self.accessGroup {
             query[kSecAttrAccessGroup as String] = accessGroup
         }
 
@@ -75,7 +75,7 @@ final class KeychainManager: Sendable {
             kSecReturnAttributes as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
-        if let accessGroup {
+        if let accessGroup = self.accessGroup {
             query[kSecAttrAccessGroup as String] = accessGroup
         }
 
@@ -103,7 +103,7 @@ final class KeychainManager: Sendable {
             // Item lag nicht in der geteilten Group → per SecItemUpdate dorthin umziehen,
             // damit die NotificationServiceExtension es lesen kann. Update statt
             // Delete+Add: schlaegt es fehl, bleibt das Item unveraendert erhalten.
-            if foundOutsideAccessGroup, let accessGroup {
+            if foundOutsideAccessGroup, let accessGroup = self.accessGroup {
                 let moveQuery: [String: Any] = [
                     kSecClass as String: kSecClassGenericPassword,
                     kSecAttrService as String: service,
