@@ -59,6 +59,8 @@ struct PushPayload {
         if let click = nonEmpty("click") { dict["click"] = click }
         if let icon = nonEmpty("icon") { dict["icon"] = icon }
         if let sequenceId = nonEmpty("sequence_id") { dict["sequence_id"] = sequenceId }
+        // Markdown-Kennzeichen fuer die App (content_type: text/markdown)
+        if let contentType = nonEmpty("content_type") { dict["content_type"] = contentType }
         if let priority = self.priority { dict["priority"] = priority }
 
         if let tagString = nonEmpty("tags") {
