@@ -202,8 +202,14 @@ struct ContentView: View {
         .sheet(isPresented: $showingPublish) {
             PublishView(selectedTopic: selectedTopic)
         }
+        .onAppear {
+            // Kaltstart per Mitteilungs-Tap: Ziel wurde gepuffert, bevor die UI existierte
+            consumePendingNotificationNavigation()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTopic)) { notification in
             if let topicName = notification.userInfo?["topic"] as? String {
+                // Live zugestellt — Puffer fuer den Kaltstart nicht mehr noetig
+                AppDelegate.pendingNotificationTopic = nil
                 requestNavigation(toTopicNamed: topicName)
             }
         }
@@ -241,6 +247,16 @@ struct ContentView: View {
         guard hasCompletedOnboarding, !servers.isEmpty else { return }
 
         AppLog.ui.info("🔗 Deep Link: Topic '\(topicName, privacy: .private)'")
+        requestNavigation(toTopicNamed: topicName)
+    }
+
+    /// Uebernimmt ein von AppDelegate gepuffertes Navigationsziel (Mitteilungs-Tap beim
+    /// Kaltstart, bevor ContentView existierte). Die Sperre wird dabei respektiert.
+    private func consumePendingNotificationNavigation() {
+        guard hasCompletedOnboarding, !servers.isEmpty,
+              let topicName = AppDelegate.pendingNotificationTopic else { return }
+        AppDelegate.pendingNotificationTopic = nil
+        AppLog.ui.info("🔗 Gepuffertes Mitteilungs-Ziel wird angesteuert")
         requestNavigation(toTopicNamed: topicName)
     }
 
