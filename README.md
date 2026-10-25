@@ -9,9 +9,9 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Platform-iOS%2026+-blue?logo=apple" alt="Platform">
+  <img src="https://img.shields.io/badge/Platform-iOS%2027+-blue?logo=apple" alt="Platform">
   <img src="https://img.shields.io/badge/Swift-6.0-orange?logo=swift" alt="Swift">
-  <img src="https://img.shields.io/badge/Xcode-26+-blue?logo=xcode" alt="Xcode">
+  <img src="https://img.shields.io/badge/Xcode-27+-blue?logo=xcode" alt="Xcode">
   <img src="https://img.shields.io/github/license/Revisor01/ntfy-plus-ios" alt="License">
   <img src="https://img.shields.io/github/v/release/Revisor01/ntfy-plus-ios" alt="Version">
 </p>
@@ -35,11 +35,11 @@
 - **Authentifizierung**: Unterstützt Benutzername/Passwort und Access Tokens
 - **Offline-Speicherung**: Nachrichten werden lokal gespeichert
 - **Dark Mode**: Vollständige Unterstützung
-- **Native iOS**: SwiftUI, SwiftData, iOS 26+
+- **Native iOS**: SwiftUI, SwiftData, iOS 27+
 
 ## Voraussetzungen
 
-- iOS 26.0+
+- iOS 27.0+
 - ntfy-Server (self-hosted oder ntfy.sh)
 
 ## Installation

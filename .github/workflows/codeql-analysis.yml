@@ -1,5 +1,8 @@
 name: CodeQL
 
+# Hinweis: Datei heisst codeql-analysis.yml, weil der alte Workflow (codeql.yml)
+# von GitHub wegen Inaktivitaet deaktiviert wurde; ein neuer Pfad ist wieder aktiv.
+#
 # Eigener Workflow statt Default-Setup: dessen Autobuild scheitert an nanopb
 # (transitive Firebase-Abhängigkeit). Das Paket enthält eine Datei namens "build",
 # wo Xcode ein Verzeichnis anlegen will — "File exists but is not a directory".
@@ -18,8 +21,8 @@ on:
 jobs:
   analyze:
     name: Analyze Swift
-    # Swift-Analyse laeuft nur auf macOS-Runnern
-    runs-on: macos-latest
+    # Swift-Analyse laeuft nur auf macOS-Runnern; iOS-27-SDK nur im Image "xcode-27"
+    runs-on: xcode-27
     permissions:
       security-events: write
       contents: read
@@ -69,7 +72,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \
-            | xcpretty || exit ${PIPESTATUS[0]}
+            -quiet
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4

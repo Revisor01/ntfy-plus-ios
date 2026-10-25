@@ -17,7 +17,8 @@ concurrency:
 jobs:
   build:
     name: Build (iOS Simulator)
-    runs-on: macos-latest
+    # iOS-27-SDK: Xcode 27 gibt es auf GitHub derzeit nur im Image "xcode-27"
+    runs-on: xcode-27
     permissions:
       contents: read
 
@@ -63,3 +64,13 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             2>&1 | tee "$RUNNER_TEMP/build.log" | grep -E "error:|warning: .*(Sendable|actor|isolat)|BUILD (SUCCEEDED|FAILED)" || true
           grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/build.log"
+
+      # Aufgeloeste Paketversionen als Artefakt, damit Package.resolved
+      # (fuer Dependabot/reproduzierbare Builds) ohne lokalen Mac aktualisiert werden kann
+      - name: Package.resolved bereitstellen
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Package.resolved
+          path: ntfy-ios.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          if-no-files-found: warn
