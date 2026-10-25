@@ -259,21 +259,25 @@ final class AttachmentDownloader: @unchecked Sendable {
 /// Entfernt den Authorization-Header bei Redirects auf einen anderen Scheme/Host/Port
 /// (gleiche Regel wie RedirectAuthGuard in der App). Keine gespeicherten Properties.
 final class AttachmentRedirectGuard: NSObject, URLSessionTaskDelegate, Sendable {
+    // Completion-Handler-Variante statt `async`: Mit Approachable Concurrency stuerzte
+    // der Swift-Compiler beim Erzeugen des ObjC-Thunks der async-Variante ab (SILGen).
     func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
         willPerformHTTPRedirection response: HTTPURLResponse,
-        newRequest request: URLRequest
-    ) async -> URLRequest? {
+        newRequest request: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void
+    ) {
         let originalURL = task.originalRequest?.url ?? response.url
         guard request.value(forHTTPHeaderField: "Authorization") != nil,
               !Self.isSameOrigin(originalURL, request.url) else {
-            return request
+            completionHandler(request)
+            return
         }
         var stripped = request
         stripped.setValue(nil, forHTTPHeaderField: "Authorization")
         logger.info("Redirect auf anderen Host — Authorization-Header entfernt")
-        return stripped
+        completionHandler(stripped)
     }
 
     static func isSameOrigin(_ lhs: URL?, _ rhs: URL?) -> Bool {
