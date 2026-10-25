@@ -62,9 +62,11 @@ struct MessageRow: View {
                     }
                 }
 
-                // Message body with Markdown support
+                // Nachrichtentext: Markdown nur, wenn der Server die Nachricht als Markdown
+                // markiert hat (upstream-Verhalten). Aeltere Nachrichten ohne Kennzeichen
+                // (isMarkdown == nil) bleiben wie bisher Markdown-formatiert.
                 if let messageText = message.message, !messageText.isEmpty {
-                    Text(parseMarkdown(messageText))
+                    Text(message.isMarkdown == false ? AttributedString(messageText) : parseMarkdown(messageText))
                         .font(AppFonts.body)
                         .foregroundStyle(.primary)
                         .lineLimit(nil)
