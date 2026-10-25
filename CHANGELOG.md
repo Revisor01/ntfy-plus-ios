@@ -58,6 +58,20 @@ der Befunde aus einem vollständigen Code-Audit. Build 7.
 - Onboarding: doppelter Server bei Doppeltipp, 5xx galt als erfolgreicher Test, Dark Mode unlesbar
 - Ungelesen-Zähler, Badge und Widget liefen bei Löschen/Gelesen auseinander
 - Polling-Fehler (400/429) wurden verschluckt
+- App-Sperre verdeckte geöffnete Sheets und Dialoge nicht — Sperrbildschirm und Sichtschutz
+  liegen jetzt in einem eigenen Fenster; Face ID startet erst bei aktiver App
+- Hinter der App-Sperre wurden Nachrichten als gelesen markiert; gesperrte Inhalte sind für
+  VoiceOver ausgeblendet
+- Änderung von Server-URL oder Zugangsdaten baut Live-Verbindung und Push-Zuordnung sofort neu auf
+- Topic entfernen meldet das Push-Abo zuverlässig ab
+- App-Symbol zeigt beim Öffnen die Zahl ungelesener Nachrichten statt 0
+- Gelesene oder gelöschte Nachrichten entfernen auch die zugehörige Mitteilung
+- Gekürzte Push-Inhalte überschreiben keine vollständig empfangenen Nachrichten mehr
+- `poll_request` zeigt nie eine falsche Nachricht an; Lösch-/Clear-Pushes erhöhen das Badge nicht
+- Live-Verbindung wird beim Zurückkehren in die App sofort neu aufgebaut; keine Reconnect-Schleife
+  bei Servern, die den Stream sofort schließen
+- Widget aktualisiert sich nach „Als gelesen", Löschen und eingegangenen Pushes
+- Keine doppelte Anfrage der Mitteilungs-Berechtigung mehr
 - SwiftData: DB-Reset-Pfade, Unsubscribe-Lifecycle, `markAllAsRead`, Credential-Speicherung
   mit Default-Server
 - UI: Icon-Reset bei Farbwahl, Bild-Recycling in `CachedAsyncImage`, Widget-Deep-Links mit
