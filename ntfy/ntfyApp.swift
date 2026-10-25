@@ -124,7 +124,8 @@ private struct PendingMessageEnvelope: Decodable {
 
 /// Uebernimmt Push-Nachrichten, die die NSE im App-Group-Container abgelegt hat,
 /// in SwiftData (via NtfyService.storeMessages — Dedup/Upsert inklusive) und
-/// loescht die Dateien danach.
+/// loescht die Dateien danach. Bereits gespeicherte Nachrichten (z.B. per SSE
+/// vollstaendig empfangen) werden nicht durch den ggf. gekuerzten FCM-Payload ersetzt.
 @MainActor
 enum PendingMessageImporter {
     static let appGroup = "group.de.godsapp.ntfy"
@@ -169,6 +170,16 @@ enum PendingMessageImporter {
             }
             guard let topic = matchedTopic else { continue }
 
+            // Schon vorhanden (SSE/Polling) — der Push-Payload ist ggf. gekuerzt
+            // (truncated) und darf die vollstaendige Nachricht nicht ueberschreiben
+            let messageId = message.id
+            let existingDescriptor = FetchDescriptor<StoredMessage>(
+                predicate: #Predicate<StoredMessage> { $0.messageId == messageId }
+            )
+            if let existingCount = try? context.fetchCount(existingDescriptor), existingCount > 0 {
+                continue
+            }
+
             topicsById[topic.id] = topic
             messagesByTopicId[topic.id, default: []].append(message)
         }
@@ -182,6 +193,13 @@ enum PendingMessageImporter {
 
         if importedCount > 0 {
             AppLog.notifications.info("📥 \(importedCount, privacy: .public) Push-Nachricht(en) aus der NotificationServiceExtension uebernommen")
+            NtfyService.shared.writeWidgetData(context: context)
+        }
+
+        // Badge auf den tatsaechlichen Ungelesen-Stand setzen (auch der NSE-Zaehler
+        // wird damit korrigiert, z.B. wenn Push-Nachrichten bereits per SSE da waren)
+        Task {
+            await NotificationService.shared.syncBadgeWithUnreadCount(context: context)
         }
     }
 }

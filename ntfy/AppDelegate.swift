@@ -22,8 +22,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Set notification delegate
         UNUserNotificationCenter.current().delegate = self
 
-        // Request notification authorization — einziger Pfad ueber NotificationService
-        // (gleiche Optionen wie ContentView/SettingsView, kein konkurrierendes .provisional)
+        // Request notification authorization — einziger automatischer Aufruf beim Start
+        // (ContentView fragt nicht mehr zusaetzlich; SettingsView nur auf Nutzeraktion)
         Task { @MainActor in
             let granted = await NotificationService.shared.requestAuthorization()
             if granted {
@@ -218,6 +218,7 @@ extension AppDelegate {
                 topic.unreadCount = max(0, topic.unreadCount - 1)
             }
             try? context.save()
+            NtfyService.shared.writeWidgetData(context: context)
         }
 
         await NotificationService.shared.syncBadgeWithUnreadCount(context: context)

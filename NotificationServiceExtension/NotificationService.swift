@@ -33,6 +33,13 @@ class NotificationService: UNNotificationServiceExtension {
         let payload = PushPayload(userInfo: request.content.userInfo)
         let topic = payload.topic
 
+        // message_delete/message_clear u.ae.: keine neue Nachricht — kein Badge,
+        // zugehoerige Mitteilung entfernen und moeglichst nichts anzeigen
+        if payload.event != "message" && payload.event != "poll_request" {
+            handleNonMessageEvent(payload)
+            return
+        }
+
         // Subtitle (Topic) entfernen
         content.subtitle = ""
 
@@ -62,7 +69,8 @@ class NotificationService: UNNotificationServiceExtension {
                 content.body = "Neue Nachricht"
             }
 
-            guard let pollId = payload.pollId ?? payload.id, !topic.isEmpty, !servers.isEmpty else {
+            // Nur die poll_id ist die ID der eigentlichen Nachricht (die eigene id gehoert zum poll_request)
+            guard let pollId = payload.pollId, !topic.isEmpty, !servers.isEmpty else {
                 logger.error("🔔 poll_request ohne Topic/poll_id/bekannten Server — Platzhalter bleibt")
                 deliver()
                 return
@@ -109,6 +117,36 @@ class NotificationService: UNNotificationServiceExtension {
         deliver()
     }
 
+    // MARK: - Nicht-Nachrichten-Events
+
+    /// Fuer Events ohne neue Nachricht (z.B. message_delete/message_clear, falls als
+    /// Alert zugestellt): Badge nicht erhoehen, die zugestellte Mitteilung der Sequenz
+    /// entfernen und einen leeren Inhalt liefern. Ohne das Filtering-Entitlement kann
+    /// die NSE die Anzeige nicht garantiert unterdruecken.
+    private func handleNonMessageEvent(_ payload: PushPayload) {
+        logger.info("🔔 Event \(payload.event, privacy: .public) — keine neue Nachricht, kein Badge")
+        bestAttemptContent = UNMutableNotificationContent()
+
+        guard let targetKey = payload.nonEmpty("sequence_id") ?? payload.id else {
+            deliver()
+            return
+        }
+
+        let center = UNUserNotificationCenter.current()
+        center.getDeliveredNotifications { [weak self] notifications in
+            let identifiers = notifications.compactMap { notification -> String? in
+                let userInfo = notification.request.content.userInfo
+                let id = userInfo["id"] as? String
+                let sequenceId = userInfo["sequence_id"] as? String
+                return (id == targetKey || sequenceId == targetKey) ? notification.request.identifier : nil
+            }
+            if !identifiers.isEmpty {
+                center.removeDeliveredNotifications(withIdentifiers: identifiers)
+            }
+            self?.deliver()
+        }
+    }
+
     // MARK: - Delivery
 
     /// Ruft den contentHandler genau einmal auf; `update` mutiert den Content vorher
@@ -150,6 +188,10 @@ class NotificationService: UNNotificationServiceExtension {
         userInfo["serverURL"] = serverURL
         if let id = message["id"] as? String {
             userInfo["id"] = id
+        }
+        // Fuer das Entfernen per message_delete/message_clear (Ziel = sequence_id)
+        if let sequenceId = message["sequence_id"] as? String, !sequenceId.isEmpty {
+            userInfo["sequence_id"] = sequenceId
         }
         if let click = message["click"] as? String, !click.isEmpty {
             userInfo["click"] = click
