@@ -1277,9 +1277,10 @@ final class NtfyService {
 
         let fileURL = containerURL.appendingPathComponent("widget_data.json")
 
-        // Alle ungelesenen StoredMessages laden, nach Zeit absteigend, max 10
+        // Die 10 neuesten ungelesenen StoredMessages fuer die Anzeige laden
+        let unreadPredicate = #Predicate<StoredMessage> { !$0.isRead }
         var descriptor = FetchDescriptor<StoredMessage>(
-            predicate: #Predicate<StoredMessage> { !$0.isRead },
+            predicate: unreadPredicate,
             sortBy: [SortDescriptor(\.time, order: .reverse)]
         )
         descriptor.fetchLimit = 10
@@ -1298,11 +1299,20 @@ final class NtfyService {
             ]
         }
 
-        guard let data = try? JSONSerialization.data(withJSONObject: entries) else { return }
+        // Tatsaechliche Anzahl ungelesener Nachrichten (nicht auf die 10 Eintraege begrenzt)
+        let unreadCount = (try? context.fetchCount(FetchDescriptor<StoredMessage>(predicate: unreadPredicate))) ?? entries.count
+
+        // Format: { "unreadCount": Int, "messages": [...] } — das Widget liest auch das
+        // fruehere reine Array-Format
+        let payload: [String: Any] = [
+            "unreadCount": max(unreadCount, entries.count),
+            "messages": entries
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
         try? data.write(to: fileURL, options: .atomic)
 
         // Widget-Timeline invalidieren
         WidgetCenter.shared.reloadAllTimelines()
-        AppLog.network.info("✅ Widget: \(entries.count, privacy: .public) ungelesene Nachrichten in widget_data.json geschrieben")
+        AppLog.network.info("✅ Widget: \(unreadCount, privacy: .public) ungelesen, \(entries.count, privacy: .public) Eintraege in widget_data.json geschrieben")
     }
 }
