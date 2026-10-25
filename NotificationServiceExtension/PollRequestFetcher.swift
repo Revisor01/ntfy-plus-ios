@@ -11,7 +11,8 @@ private let logger = Logger(subsystem: "de.godsapp.ntfy.NotificationServiceExten
 // Keychain abgerufen. Ist das Topic auf mehreren Servern abonniert, werden diese der
 // Reihe nach probiert, bis einer die Nachricht liefert.
 
-final class PollRequestFetcher {
+// @unchecked Sendable: veraenderlicher Zustand (currentTask, isCancelled) nur unter `lock`
+final class PollRequestFetcher: @unchecked Sendable {
     struct Result {
         let serverURL: String
         let message: [String: Any]
@@ -37,7 +38,7 @@ final class PollRequestFetcher {
                pollId: String,
                servers: [String],
                deadline: Date,
-               completion: @escaping (Result?) -> Void) {
+               completion: @escaping @Sendable (Result?) -> Void) {
         fetchNext(topic: topic, pollId: pollId, servers: servers[...], deadline: deadline, completion: completion)
     }
 
@@ -59,7 +60,7 @@ final class PollRequestFetcher {
                            pollId: String,
                            servers: ArraySlice<String>,
                            deadline: Date,
-                           completion: @escaping (Result?) -> Void) {
+                           completion: @escaping @Sendable (Result?) -> Void) {
         guard let serverURL = servers.first, !cancelled, Date() < deadline else {
             session.finishTasksAndInvalidate()
             completion(nil)

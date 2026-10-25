@@ -4,7 +4,10 @@ import os.log
 
 private let logger = Logger(subsystem: "de.godsapp.ntfy.NotificationServiceExtension", category: "NotificationService")
 
-class NotificationService: UNNotificationServiceExtension {
+// @unchecked Sendable: der Zustand wird in didReceive vor jedem Netzwerk-Callback gesetzt;
+// alles, was danach parallel (Callbacks vs. serviceExtensionTimeWillExpire) gelesen oder
+// geschrieben wird, liegt unter `deliveryLock`.
+class NotificationService: UNNotificationServiceExtension, @unchecked Sendable {
 
     var contentHandler: ((UNNotificationContent) -> Void)?
     var bestAttemptContent: UNMutableNotificationContent?
@@ -14,14 +17,22 @@ class NotificationService: UNNotificationServiceExtension {
     private let deliveryLock = NSLock()
     private var hasDelivered = false
     private var pollFetcher: PollRequestFetcher?
+    private var attachmentDownloader: AttachmentDownloader?
 
     /// Die NSE hat ca. 30 s; danach greift serviceExtensionTimeWillExpire.
+    /// Gemeinsames Budget fuer poll_request-Abruf und Bild-Download.
     private let pollBudget: TimeInterval = 22
+    /// Ende des Zeitbudgets (ab didReceive)
+    private var deadline = Date()
+
+    /// Unterhalb dieser Restzeit wird kein Bild-Download mehr begonnen.
+    private let minimumAttachmentTime: TimeInterval = 2
 
     override func didReceive(_ request: UNNotificationRequest, withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
         logger.info("🔔 NotificationServiceExtension didReceive called")
 
         self.contentHandler = contentHandler
+        deadline = Date().addingTimeInterval(pollBudget)
         guard let content = request.content.mutableCopy() as? UNMutableNotificationContent else {
             logger.error("🔔 Could not create mutable content")
             hasDelivered = true
@@ -84,11 +95,13 @@ class NotificationService: UNNotificationServiceExtension {
             }
 
             let fetcher = PollRequestFetcher()
+            deliveryLock.lock()
             pollFetcher = fetcher
+            deliveryLock.unlock()
             fetcher.fetch(topic: topic,
                           pollId: pollId,
                           servers: servers,
-                          deadline: Date().addingTimeInterval(pollBudget)) { [weak self] result in
+                          deadline: deadline) { [weak self] result in
                 guard let self else { return }
                 guard let result else {
                     logger.error("🔔 poll_request konnte nicht aufgeloest werden — Platzhalter bleibt")
@@ -98,13 +111,17 @@ class NotificationService: UNNotificationServiceExtension {
                 // Auch wenn die Zeit bereits abgelaufen ist: App bekommt die Nachricht trotzdem
                 SharedStore.writePendingMessage(result.message, serverURL: result.serverURL)
                 let isMuted = SharedStore.isMuted(topic: topic, serverURL: result.serverURL)
-                self.deliver { content in
+                self.updateContent { content in
                     NotificationService.applyResolvedMessage(result.message, serverURL: result.serverURL, topic: topic, to: content)
                     if isMuted {
                         PriorityStyle.applyMuted(to: content)
                     }
                 }
                 logger.info("🔔 poll_request aufgeloest, badge: \(newBadge, privacy: .public)")
+                // Bild-Anhang (falls vorhanden) in der Restzeit laden — Zugangsdaten nur
+                // fuer den Server, von dem die Nachricht stammt
+                self.deliverAfterAttachment(AttachmentInfo(message: result.message),
+                                            authServers: [result.serverURL])
             }
             return
         }
@@ -119,13 +136,59 @@ class NotificationService: UNNotificationServiceExtension {
         }
 
         logger.info("🔔 Removed subtitle, badge: \(newBadge, privacy: .public), delivering notification")
-        deliver()
+        deliverAfterAttachment(AttachmentInfo(payload: payload), authServers: servers)
     }
 
     override func serviceExtensionTimeWillExpire() {
         logger.error("🔔 serviceExtensionTimeWillExpire — liefere best attempt")
-        pollFetcher?.cancel()
+        deliveryLock.lock()
+        let fetcher = pollFetcher
+        let downloader = attachmentDownloader
+        deliveryLock.unlock()
+        fetcher?.cancel()
+        downloader?.cancel()
         deliver()
+    }
+
+    // MARK: - Bild-Anhang
+
+    /// Laedt ein Bild-Attachment (falls vorhanden, klein genug und in der Restzeit
+    /// moeglich), haengt es an und liefert danach aus. Ohne Bild oder bei Fehlern wird
+    /// sofort bzw. ohne Anhang ausgeliefert — die Mitteilung scheitert nie am Anhang.
+    /// - Parameter authServers: Server, deren Zugangsdaten gesendet werden duerfen —
+    ///   aber nur, wenn der Anhang auf genau diesem Server liegt.
+    private func deliverAfterAttachment(_ info: AttachmentInfo?, authServers: [String]) {
+        guard let info, info.isDownloadableImage else {
+            deliver()
+            return
+        }
+        let remaining = deadline.timeIntervalSinceNow
+        guard remaining > minimumAttachmentTime else {
+            logger.info("🔔 Keine Zeit mehr fuer den Bild-Anhang — liefere ohne")
+            deliver()
+            return
+        }
+
+        let downloader = AttachmentDownloader(timeout: remaining)
+        deliveryLock.lock()
+        let alreadyDelivered = hasDelivered
+        if !alreadyDelivered {
+            attachmentDownloader = downloader
+        }
+        deliveryLock.unlock()
+        guard !alreadyDelivered else { return }
+
+        downloader.download(info, authServers: authServers) { [weak self] attachment in
+            guard let self else { return }
+            if let attachment {
+                logger.info("🔔 Bild-Anhang angehaengt")
+                self.deliver { content in
+                    content.attachments = [attachment]
+                }
+            } else {
+                self.deliver()
+            }
+        }
     }
 
     // MARK: - Nicht-Nachrichten-Events
@@ -159,6 +222,15 @@ class NotificationService: UNNotificationServiceExtension {
     }
 
     // MARK: - Delivery
+
+    /// Aendert den Content unter dem Lock, ohne auszuliefern (nur solange noch nicht
+    /// ausgeliefert) — z.B. aufgeloeste poll_request-Nachricht vor dem Bild-Download.
+    private func updateContent(_ update: (UNMutableNotificationContent) -> Void) {
+        deliveryLock.lock()
+        defer { deliveryLock.unlock() }
+        guard !hasDelivered, let content = bestAttemptContent else { return }
+        update(content)
+    }
 
     /// Ruft den contentHandler genau einmal auf; `update` mutiert den Content vorher
     /// unter demselben Lock (nur wenn noch nicht ausgeliefert).
