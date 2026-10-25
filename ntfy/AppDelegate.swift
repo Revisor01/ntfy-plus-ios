@@ -8,6 +8,11 @@ import FirebaseMessaging
 
 class AppDelegate: NSObject, UIApplicationDelegate {
 
+    /// Topic aus einem Mitteilungs-Tap, das noch keine UI angesteuert hat (Kaltstart:
+    /// `.navigateToTopic` wird gepostet, bevor ContentView existiert). ContentView
+    /// uebernimmt und leert es — bei aktiver Sperre erst nach der Entsperrung.
+    @MainActor static var pendingNotificationTopic: String?
+
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
 
@@ -158,6 +163,9 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
             // Navigate to topic if available
             if let topic = topicName {
                 Task { @MainActor in
+                    // Beim Kaltstart existiert ContentView noch nicht und verpasst die
+                    // Notification — Ziel puffern; ContentView uebernimmt es beim Erscheinen
+                    AppDelegate.pendingNotificationTopic = topic
                     NotificationCenter.default.post(
                         name: .navigateToTopic,
                         object: nil,

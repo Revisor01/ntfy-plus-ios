@@ -23,14 +23,29 @@ struct ContentView: View {
     /// Deep-Link-Ziel, das erst nach erfolgreicher Entsperrung angesteuert wird
     @State private var pendingDeepLinkTopic: String?
     @State private var hasInitialized = false
-    @State private var isLocked = AppSettings.biometricLockEnabled
+    /// Sperrzustand ist app-weit (alle Fenster/Szenen teilen ihn, z.B. iPad-Multiwindow)
+    @State private var lockState = AppLockState.shared
+    /// Die UIWindowScene dieses ContentView — Ziel fuer das Sperrfenster
+    @State private var sceneBox = WindowSceneBox()
     @State private var lastBackgroundDate: Date?
     @State private var hasEnteredBackground = false
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
+    private var isLocked: Bool {
+        get { lockState.isLocked }
+        nonmutating set { lockState.isLocked = newValue }
+    }
+
     var body: some View {
         rootContent
+            .background(
+                // Ermittelt die eigene Szene, sobald die View im Fenster haengt
+                WindowSceneReader { scene in
+                    sceneBox.scene = scene
+                    updateLockWindow()
+                }
+            )
             // Die Sperre selbst liegt in einem eigenen Fenster ueber allen Sheets/Alerts
             // (LockWindowPresenter). Darunter: Inhalte fuer VoiceOver ausblenden und
             // Views mitteilen, dass nichts als gelesen markiert werden darf.
@@ -42,6 +57,7 @@ struct ContentView: View {
             .onAppear {
                 columnVisibility = horizontalSizeClass == .regular ? .all : .detailOnly
                 updateLockWindow()
+                MutedTopicsSync.write(topics: topics)
                 if !hasInitialized {
                     hasInitialized = true
                     Task {
@@ -57,14 +73,25 @@ struct ContentView: View {
                 // Reagiert auch auf geaenderte Server-URL (Server-Editor zieht Topics um)
                 syncSubscriptions()
             }
+            .onChange(of: muteSyncKeys) {
+                // Stummschaltung fuer die NotificationServiceExtension spiegeln
+                MutedTopicsSync.write(topics: topics)
+            }
             .onChange(of: isLocked) {
                 updateLockWindow()
+                // Entsperrt (auch in einem anderen Fenster) — vorgemerktes Ziel ansteuern
+                if !isLocked, let pendingTopic = pendingDeepLinkTopic {
+                    pendingDeepLinkTopic = nil
+                    navigate(toTopicNamed: pendingTopic)
+                }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 // Beim Wechsel in den Hintergrund sofort sperren — Snapshot/Rueckkehr zeigt keine Inhalte
+                // (iPad-Multiwindow: nicht, solange ein anderes Fenster der App sichtbar ist —
+                // diese Szene selbst ist per Datenschutz-Abdeckung verdeckt)
                 if newPhase == .background {
                     hasEnteredBackground = true
-                    if AppSettings.biometricLockEnabled {
+                    if AppSettings.biometricLockEnabled && !hasOtherForegroundScene {
                         isLocked = true
                     }
                 }
@@ -81,6 +108,10 @@ struct ContentView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
                 hasEnteredBackground = true
+                // Ganze App im Hintergrund — in jedem Fall sperren
+                if AppSettings.biometricLockEnabled {
+                    isLocked = true
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
                 guard hasInitialized else { return }
@@ -123,18 +154,25 @@ struct ContentView: View {
             content = .hidden
         }
         LockWindowPresenter.shared.update(
+            scene: sceneBox.scene,
             content: content,
             isSceneActive: scenePhase == .active,
             onUnlock: { unlock() }
         )
     }
 
-    private func unlock() {
-        isLocked = false
-        if let pendingTopic = pendingDeepLinkTopic {
-            pendingDeepLinkTopic = nil
-            navigate(toTopicNamed: pendingTopic)
+    /// true, wenn eine andere Szene der App noch im Vordergrund ist (iPad-Multiwindow).
+    private var hasOtherForegroundScene: Bool {
+        let ownScene = sceneBox.scene
+        return UIApplication.shared.connectedScenes.contains { scene in
+            scene !== ownScene
+                && (scene.activationState == .foregroundActive || scene.activationState == .foregroundInactive)
         }
+    }
+
+    private func unlock() {
+        // Vorgemerktes Deep-Link-Ziel wird in onChange(of: isLocked) angesteuert
+        isLocked = false
     }
 
     private var mainContent: some View {
@@ -164,8 +202,14 @@ struct ContentView: View {
         .sheet(isPresented: $showingPublish) {
             PublishView(selectedTopic: selectedTopic)
         }
+        .onAppear {
+            // Kaltstart per Mitteilungs-Tap: Ziel wurde gepuffert, bevor die UI existierte
+            consumePendingNotificationNavigation()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .navigateToTopic)) { notification in
             if let topicName = notification.userInfo?["topic"] as? String {
+                // Live zugestellt — Puffer fuer den Kaltstart nicht mehr noetig
+                AppDelegate.pendingNotificationTopic = nil
                 requestNavigation(toTopicNamed: topicName)
             }
         }
@@ -206,6 +250,16 @@ struct ContentView: View {
         requestNavigation(toTopicNamed: topicName)
     }
 
+    /// Uebernimmt ein von AppDelegate gepuffertes Navigationsziel (Mitteilungs-Tap beim
+    /// Kaltstart, bevor ContentView existierte). Die Sperre wird dabei respektiert.
+    private func consumePendingNotificationNavigation() {
+        guard hasCompletedOnboarding, !servers.isEmpty,
+              let topicName = AppDelegate.pendingNotificationTopic else { return }
+        AppDelegate.pendingNotificationTopic = nil
+        AppLog.ui.info("🔗 Gepuffertes Mitteilungs-Ziel wird angesteuert")
+        requestNavigation(toTopicNamed: topicName)
+    }
+
     /// Navigiert zum Topic — bei aktiver Sperre erst nach erfolgreicher Entsperrung.
     /// Ein Deep Link darf die biometrische Sperre NIE aufheben.
     private func requestNavigation(toTopicNamed topicName: String) {
@@ -233,6 +287,12 @@ struct ContentView: View {
     /// Subscription-Abgleich (auch wenn sich nur Server-URL oder Name aendert).
     private var subscriptionSyncKeys: Set<String> {
         Set(topics.filter { !$0.isDeleted && $0.modelContext != nil }.map { "\($0.id)|\($0.serverURL)|\($0.name)" })
+    }
+
+    /// "serverURL|name|isMuted" aller Topics — Ausloeser fuer den Abgleich der
+    /// Stummschaltung mit der NotificationServiceExtension.
+    private var muteSyncKeys: Set<String> {
+        Set(topics.filter { !$0.isDeleted && $0.modelContext != nil }.map { "\($0.serverURL)|\($0.name)|\($0.isMuted)" })
     }
 
     /// Setzt `selectedTopic` zurueck, wenn das Topic geloescht wurde, bevor die
@@ -361,6 +421,39 @@ private struct SubscribedTopic: Hashable {
     let name: String
 }
 
+// MARK: - Stummgeschaltete Topics (App Group)
+
+/// Schreibt die stummgeschalteten Topics in die App-Group-UserDefaults, damit die
+/// NotificationServiceExtension Push-Mitteilungen dieser Topics still zustellt.
+/// Format (siehe SharedStore in der NSE):
+/// - `mutedTopicKeys`: ["<serverURL>|<name>"] aller stummen Topics
+/// - `mutedTopicNames`: Namen, bei denen ALLE gleichnamigen Topics stumm sind
+///   (fuer Pushes, deren Server die NSE nicht eindeutig kennt)
+@MainActor
+private enum MutedTopicsSync {
+    static let appGroup = "group.de.godsapp.ntfy"
+    static let keysKey = "mutedTopicKeys"
+    static let namesKey = "mutedTopicNames"
+
+    static func write(topics: [Topic]) {
+        guard let defaults = UserDefaults(suiteName: appGroup) else { return }
+        let liveTopics = topics.filter { !$0.isDeleted && $0.modelContext != nil }
+
+        var mutedKeys: Set<String> = []
+        var allMutedByName: [String: Bool] = [:]
+        for topic in liveTopics {
+            if topic.isMuted {
+                mutedKeys.insert("\(topic.serverURL)|\(topic.name)")
+            }
+            allMutedByName[topic.name] = (allMutedByName[topic.name] ?? true) && topic.isMuted
+        }
+        let mutedNames = allMutedByName.filter { $0.value }.map { $0.key }
+
+        defaults.set(mutedKeys.sorted(), forKey: keysKey)
+        defaults.set(mutedNames.sorted(), forKey: namesKey)
+    }
+}
+
 // MARK: - App-Sperre (eigenes Fenster)
 
 /// true, solange die App-Sperre aktiv ist — Views markieren dann nichts als gelesen.
@@ -413,58 +506,222 @@ private struct LockWindowRootView: View {
     }
 }
 
-/// Zeigt Sperrbildschirm und Datenschutz-Abdeckung in einem eigenen UIWindow
-/// oberhalb der Alert-Ebene — ein Overlay im SwiftUI-Baum liegt unter Sheets,
-/// Alerts und Popovers und wuerde deren Inhalte nicht verdecken.
+/// App-weiter Sperrzustand — von allen ContentViews (eine pro Szene) geteilt, damit
+/// eine Entsperrung in einem Fenster alle Fenster freigibt.
+@Observable
+@MainActor
+private final class AppLockState {
+    static let shared = AppLockState()
+
+    var isLocked: Bool
+
+    private init() {
+        isLocked = AppSettings.biometricLockEnabled
+    }
+}
+
+/// Haelt die UIWindowScene eines ContentView (schwach, ohne View-Updates auszuloesen).
+@MainActor
+private final class WindowSceneBox {
+    weak var scene: UIWindowScene?
+}
+
+/// Meldet die UIWindowScene, in deren Fenster die View haengt.
+private struct WindowSceneReader: UIViewRepresentable {
+    let onSceneChange: (UIWindowScene?) -> Void
+
+    func makeUIView(context: Context) -> WindowSceneReaderView {
+        let view = WindowSceneReaderView()
+        view.onSceneChange = onSceneChange
+        return view
+    }
+
+    func updateUIView(_ uiView: WindowSceneReaderView, context: Context) {
+        uiView.onSceneChange = onSceneChange
+    }
+}
+
+private final class WindowSceneReaderView: UIView {
+    var onSceneChange: ((UIWindowScene?) -> Void)?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        isAccessibilityElement = false
+        backgroundColor = .clear
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        isUserInteractionEnabled = false
+        isAccessibilityElement = false
+        backgroundColor = .clear
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        let scene = window?.windowScene
+        // Nicht mitten im SwiftUI-Update andere Fenster umbauen
+        Task { @MainActor [weak self] in
+            self?.onSceneChange?(scene)
+        }
+    }
+}
+
+/// Zeigt Sperrbildschirm und Datenschutz-Abdeckung in je einem eigenen UIWindow pro
+/// UIWindowScene oberhalb der Alert-Ebene — ein Overlay im SwiftUI-Baum liegt unter
+/// Sheets, Alerts und Popovers und wuerde deren Inhalte nicht verdecken. Jede Szene
+/// (iPad-Multiwindow) bekommt ihr eigenes Sperrfenster; getrennte Szenen werden entfernt.
 @MainActor
 private final class LockWindowPresenter {
     static let shared = LockWindowPresenter()
 
-    private var window: UIWindow?
-    private var hostingController: UIHostingController<LockWindowRootView>?
+    @MainActor
+    private final class Entry {
+        weak var scene: UIWindowScene?
+        let window: UIWindow
+        let hostingController: UIHostingController<LockWindowRootView>
+        var content: LockWindowContent = .hidden
+        var isSceneActive = false
+        var onUnlock: () -> Void = {}
 
-    func update(content: LockWindowContent, isSceneActive: Bool, onUnlock: @escaping () -> Void) {
-        let rootView = LockWindowRootView(content: content, isSceneActive: isSceneActive, onUnlock: onUnlock)
-
-        guard content != .hidden else {
-            hostingController?.rootView = rootView
-            window?.isHidden = true
-            return
-        }
-
-        if let hostingController, let window, window.windowScene != nil {
-            hostingController.rootView = rootView
-        } else {
-            guard let scene = Self.targetScene() else {
-                AppLog.ui.error("🔒 Keine UIWindowScene fuer das Sperrfenster gefunden")
-                return
-            }
-            let controller = UIHostingController(rootView: rootView)
+        init(scene: UIWindowScene) {
+            self.scene = scene
+            let controller = UIHostingController(
+                rootView: LockWindowRootView(content: .hidden, isSceneActive: false, onUnlock: {})
+            )
             controller.view.backgroundColor = .clear
             // VoiceOver bleibt im Sperrfenster
             controller.view.accessibilityViewIsModal = true
-            let newWindow = UIWindow(windowScene: scene)
-            newWindow.windowLevel = .alert + 1
-            newWindow.rootViewController = controller
-            newWindow.isHidden = true
-            window = newWindow
-            hostingController = controller
-        }
-
-        guard let window else { return }
-        window.overrideUserInterfaceStyle = Self.interfaceStyle
-        if window.isHidden {
-            // Offene Tastatur (z.B. in einem Sheet) schliessen — sie laege sonst ueber der Sperre
-            _ = UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            window.isHidden = false
+            let window = UIWindow(windowScene: scene)
+            window.windowLevel = .alert + 1
+            window.rootViewController = controller
+            window.isHidden = true
+            self.window = window
+            self.hostingController = controller
         }
     }
 
-    private static func targetScene() -> UIWindowScene? {
+    private var entries: [ObjectIdentifier: Entry] = [:]
+    /// Szene, deren Sperrbildschirm automatisch authentifizieren darf — nur eine
+    /// gleichzeitig, sonst konkurrieren mehrere Face-ID-Dialoge.
+    private var autoAuthSceneID: ObjectIdentifier?
+    private var disconnectObserver: NSObjectProtocol?
+
+    private init() {
+        disconnectObserver = NotificationCenter.default.addObserver(
+            forName: UIScene.didDisconnectNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let scene = notification.object as? UIWindowScene else { return }
+            let sceneID = ObjectIdentifier(scene)
+            MainActor.assumeIsolated {
+                self?.removeEntry(for: sceneID)
+            }
+        }
+    }
+
+    /// - Parameter requestedScene: Szene des aufrufenden ContentView; nil, solange sie
+    ///   noch nicht bekannt ist (dann nur bei genau einer verbundenen Szene diese nutzen).
+    func update(scene requestedScene: UIWindowScene?,
+                content: LockWindowContent,
+                isSceneActive: Bool,
+                onUnlock: @escaping () -> Void) {
+        pruneDisconnectedEntries()
+
+        guard let scene = requestedScene ?? Self.fallbackScene() else {
+            if content != .hidden {
+                AppLog.ui.error("🔒 Keine eindeutige UIWindowScene fuer das Sperrfenster gefunden")
+            }
+            return
+        }
+        let sceneID = ObjectIdentifier(scene)
+
+        let entry: Entry
+        if let existing = entries[sceneID] {
+            entry = existing
+        } else {
+            // Fuer "nichts anzeigen" kein Fenster anlegen
+            guard content != .hidden else { return }
+            entry = Entry(scene: scene)
+            entries[sceneID] = entry
+        }
+        entry.content = content
+        entry.isSceneActive = isSceneActive
+        entry.onUnlock = onUnlock
+
+        let previousOwner = autoAuthSceneID
+        updateAutoAuthOwner(preferring: sceneID)
+
+        if previousOwner != autoAuthSceneID {
+            // Besitzer gewechselt — alle Sperrfenster neu darstellen
+            for (id, other) in entries {
+                render(other, sceneID: id)
+            }
+        } else {
+            render(entry, sceneID: sceneID)
+        }
+    }
+
+    // MARK: Interna
+
+    private func updateAutoAuthOwner(preferring sceneID: ObjectIdentifier) {
+        if let owner = autoAuthSceneID {
+            if let ownerEntry = entries[owner], ownerEntry.content == .lockScreen {
+                return
+            }
+            autoAuthSceneID = nil
+        }
+        if let preferred = entries[sceneID], preferred.content == .lockScreen, preferred.isSceneActive {
+            autoAuthSceneID = sceneID
+            return
+        }
+        autoAuthSceneID = entries.first { $0.value.content == .lockScreen && $0.value.isSceneActive }?.key
+    }
+
+    private func render(_ entry: Entry, sceneID: ObjectIdentifier) {
+        let mayAutoAuthenticate = entry.isSceneActive && autoAuthSceneID == sceneID
+        entry.hostingController.rootView = LockWindowRootView(
+            content: entry.content,
+            isSceneActive: mayAutoAuthenticate,
+            onUnlock: entry.onUnlock
+        )
+
+        guard entry.content != .hidden else {
+            entry.window.isHidden = true
+            return
+        }
+
+        entry.window.overrideUserInterfaceStyle = Self.interfaceStyle
+        if entry.window.isHidden {
+            // Offene Tastatur (z.B. in einem Sheet) schliessen — sie laege sonst ueber der Sperre
+            _ = UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            entry.window.isHidden = false
+        }
+    }
+
+    private func removeEntry(for sceneID: ObjectIdentifier) {
+        guard let entry = entries.removeValue(forKey: sceneID) else { return }
+        entry.window.isHidden = true
+        if autoAuthSceneID == sceneID {
+            autoAuthSceneID = nil
+        }
+    }
+
+    /// Entfernt Fenster von Szenen, die nicht mehr verbunden sind.
+    private func pruneDisconnectedEntries() {
+        let connected = Set(UIApplication.shared.connectedScenes.map { ObjectIdentifier($0) })
+        let staleIDs = entries.filter { $0.value.scene == nil || !connected.contains($0.key) }.map { $0.key }
+        for id in staleIDs {
+            removeEntry(for: id)
+        }
+    }
+
+    /// Nur eindeutig: bei mehreren Szenen koennte sonst die falsche abgedeckt werden.
+    private static func fallbackScene() -> UIWindowScene? {
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        return scenes.first { $0.activationState == .foregroundActive }
-            ?? scenes.first { $0.activationState == .foregroundInactive }
-            ?? scenes.first
+        return scenes.count == 1 ? scenes.first : nil
     }
 
     /// Eigenes Fenster erbt .preferredColorScheme der App nicht — Theme direkt setzen.
