@@ -31,14 +31,17 @@ struct ContentView: View {
 
     var body: some View {
         rootContent
-            .overlay { lockOverlay }
-            .animation(.easeInOut(duration: 0.2), value: isLocked)
+            // Die Sperre selbst liegt in einem eigenen Fenster ueber allen Sheets/Alerts
+            // (LockWindowPresenter). Darunter: Inhalte fuer VoiceOver ausblenden und
+            // Views mitteilen, dass nichts als gelesen markiert werden darf.
+            .accessibilityHidden(isLocked)
+            .environment(\.isAppLocked, isLocked)
             .onOpenURL { url in
                 handleDeepLink(url)
             }
             .onAppear {
                 columnVisibility = horizontalSizeClass == .regular ? .all : .detailOnly
-                requestNotificationPermission()
+                updateLockWindow()
                 if !hasInitialized {
                     hasInitialized = true
                     Task {
@@ -48,10 +51,14 @@ struct ContentView: View {
                     }
                 }
             }
-            .onChange(of: currentTopicIds) {
+            .onChange(of: subscriptionSyncKeys) {
                 // Geloeschtes Topic nicht weiter im Detail-Bereich halten (iPad: dismiss() wirkt dort nicht)
                 validateSelectedTopic()
+                // Reagiert auch auf geaenderte Server-URL (Server-Editor zieht Topics um)
                 syncSubscriptions()
+            }
+            .onChange(of: isLocked) {
+                updateLockWindow()
             }
             .onChange(of: scenePhase) { _, newPhase in
                 // Beim Wechsel in den Hintergrund sofort sperren — Snapshot/Rueckkehr zeigt keine Inhalte
@@ -61,9 +68,16 @@ struct ContentView: View {
                         isLocked = true
                     }
                 }
+                updateLockWindow()
             }
             .onChange(of: horizontalSizeClass) { _, newValue in
                 columnVisibility = newValue == .regular ? .all : .detailOnly
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .serverConfigurationChanged)) { notification in
+                // Server-URL oder Zugangsdaten geaendert — SSE mit den aktuellen Keychain-Daten neu aufbauen
+                if let serverURL = notification.userInfo?["serverURL"] as? String {
+                    resubscribeTopics(ofServer: serverURL)
+                }
             }
             .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in
                 hasEnteredBackground = true
@@ -74,10 +88,14 @@ struct ContentView: View {
                     isLocked = true
                 }
                 hasEnteredBackground = false
-                AppLog.ui.info("📱 willEnterForeground - refreshing messages")
+                AppLog.ui.info("📱 willEnterForeground - reconnecting SSE and refreshing messages")
+                let context = modelContext
                 Task {
-                    await NotificationService.shared.clearBadge()
+                    // Im Hintergrund abgebrochene/haengende SSE-Streams sofort neu aufbauen
+                    await ntfyService.reconnectAll()
                     await refreshAllTopics()
+                    // Badge aus den ungelesenen Nachrichten setzen (nicht pauschal auf 0)
+                    await NotificationService.shared.syncBadgeWithUnreadCount(context: context)
                 }
             }
     }
@@ -91,28 +109,24 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder
-    private var lockOverlay: some View {
+    /// Sperrbildschirm bzw. Datenschutz-Abdeckung im eigenen Fenster ueber allen
+    /// Sheets und Alerts einblenden oder ausblenden.
+    private func updateLockWindow() {
+        let content: LockWindowContent
         if isLocked && scenePhase != .background {
-            // Nicht im Hintergrund einblenden — LockScreenView startet onAppear die Authentifizierung
-            LockScreenView {
-                unlock()
-            }
-            .transition(.opacity)
+            // Nicht im Hintergrund — LockScreenView authentifiziert erst bei aktiver Szene
+            content = .lockScreen
         } else if (isLocked || AppSettings.biometricLockEnabled) && scenePhase != .active {
             // Datenschutz-Overlay fuer App-Switcher-Snapshot und inaktive Phasen
-            privacyOverlay
+            content = .privacy
+        } else {
+            content = .hidden
         }
-    }
-
-    private var privacyOverlay: some View {
-        ZStack {
-            Color(.systemBackground)
-                .ignoresSafeArea()
-            Image(systemName: "lock.fill")
-                .font(.system(size: 56))
-                .foregroundStyle(.secondary)
-        }
+        LockWindowPresenter.shared.update(
+            content: content,
+            isSceneActive: scenePhase == .active,
+            onUnlock: { unlock() }
+        )
     }
 
     private func unlock() {
@@ -167,14 +181,9 @@ struct ContentView: View {
                         topic.unreadCount = max(0, topic.unreadCount - 1)
                     }
                     try? modelContext.save()
+                    ntfyService.writeWidgetData(context: modelContext)
                 }
             }
-        }
-    }
-
-    private func requestNotificationPermission() {
-        Task {
-            _ = await NotificationService.shared.requestAuthorization()
         }
     }
 
@@ -220,9 +229,10 @@ struct ContentView: View {
 
     // MARK: - Selection
 
-    /// IDs der aktuell existierenden Topics — Ausloeser fuer Subscription-Abgleich.
-    private var currentTopicIds: Set<String> {
-        Set(topics.filter { !$0.isDeleted && $0.modelContext != nil }.map(\.id))
+    /// "id|serverURL|name" der aktuell existierenden Topics — Ausloeser fuer den
+    /// Subscription-Abgleich (auch wenn sich nur Server-URL oder Name aendert).
+    private var subscriptionSyncKeys: Set<String> {
+        Set(topics.filter { !$0.isDeleted && $0.modelContext != nil }.map { "\($0.id)|\($0.serverURL)|\($0.name)" })
     }
 
     /// Setzt `selectedTopic` zurueck, wenn das Topic geloescht wurde, bevor die
@@ -265,10 +275,40 @@ struct ContentView: View {
             }
         }
 
-        // 2. Neue Topics abonnieren
-        for topic in currentTopics where subscribedTopicIds[topic.id] == nil {
-            subscribe(to: topic)
+        // 2. Neue Topics abonnieren, Topics mit geaenderter Server-URL/Name neu abonnieren
+        for topic in currentTopics {
+            guard let subscribed = subscribedTopicIds[topic.id] else {
+                subscribe(to: topic)
+                continue
+            }
+            if subscribed != SubscribedTopic(serverURL: topic.serverURL, name: topic.name) {
+                resubscribe(topic, replacing: subscribed, currentKeys: currentKeys)
+            }
         }
+    }
+
+    /// Baut die SSE-Subscriptions aller Topics eines Servers mit den aktuellen
+    /// Zugangsdaten neu auf (nach Aenderung im Server-Editor).
+    private func resubscribeTopics(ofServer serverURL: String) {
+        let currentTopics = topics.filter { !$0.isDeleted && $0.modelContext != nil }
+        let currentKeys = Set(currentTopics.map { SubscribedTopic(serverURL: $0.serverURL, name: $0.name) })
+        for topic in currentTopics where topic.serverURL == serverURL {
+            resubscribe(topic, replacing: subscribedTopicIds[topic.id], currentKeys: currentKeys)
+        }
+    }
+
+    /// Abonniert das Topic neu (aktuelle URL + Keychain-Daten) und beendet danach die
+    /// alte Subscription, sofern kein anderes Topic sie noch nutzt. Neu vor alt, damit
+    /// der FCM-Refcount (TopicServerMap) bei gleichem Namen nie auf 0 faellt.
+    private func resubscribe(_ topic: Topic, replacing old: SubscribedTopic?, currentKeys: Set<SubscribedTopic>) {
+        subscribe(to: topic)
+
+        guard let old,
+              old != SubscribedTopic(serverURL: topic.serverURL, name: topic.name),
+              !currentKeys.contains(old) else { return }
+        ntfyService.unsubscribe(serverURL: old.serverURL, topic: old.name)
+        FirebaseService.shared.unsubscribeFromTopic(serverURL: old.serverURL, topic: old.name)
+        AppLog.ui.info("🔌 Subscription fuer '\(old.name, privacy: .private)' auf neuen Server umgezogen")
     }
 
     private func subscribe(to topic: Topic) {
@@ -295,6 +335,9 @@ struct ContentView: View {
                 guard !topicRef.isDeleted, topicRef.modelContext != nil else { return }
                 ntfyService.storeMessages(for: topicRef, messages: [message], context: context)
                 ntfyService.writeWidgetData(context: context)
+                Task {
+                    await NotificationService.shared.syncBadgeWithUnreadCount(context: context)
+                }
             },
             onDelete: { @MainActor event in
                 // message_delete: Ziel ueber sequence_id — Nachricht aus DB und Mitteilungszentrale entfernen
@@ -316,6 +359,122 @@ struct ContentView: View {
 private struct SubscribedTopic: Hashable {
     let serverURL: String
     let name: String
+}
+
+// MARK: - App-Sperre (eigenes Fenster)
+
+/// true, solange die App-Sperre aktiv ist — Views markieren dann nichts als gelesen.
+private struct AppLockedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var isAppLocked: Bool {
+        get { self[AppLockedKey.self] }
+        set { self[AppLockedKey.self] = newValue }
+    }
+}
+
+/// Was das Sperrfenster gerade zeigt.
+private enum LockWindowContent {
+    case hidden
+    case privacy
+    case lockScreen
+}
+
+/// Inhalt des Sperrfensters. Stabile Wurzel, damit der LockScreenView-State
+/// (z.B. "bereits automatisch authentifiziert") bei Phasenwechseln erhalten bleibt.
+private struct LockWindowRootView: View {
+    let content: LockWindowContent
+    let isSceneActive: Bool
+    let onUnlock: () -> Void
+
+    var body: some View {
+        if content == .lockScreen {
+            ZStack {
+                // Deckender Hintergrund — das Material allein darf keine Inhalte durchscheinen lassen
+                Color(.systemBackground)
+                    .ignoresSafeArea()
+                LockScreenView(isSceneActive: isSceneActive, onUnlock: onUnlock)
+            }
+            .tint(Color(hex: AppSettings.accentColorHex))
+        } else if content == .privacy {
+            ZStack {
+                Color(.systemBackground)
+                    .ignoresSafeArea()
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 56))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+        } else {
+            Color.clear
+        }
+    }
+}
+
+/// Zeigt Sperrbildschirm und Datenschutz-Abdeckung in einem eigenen UIWindow
+/// oberhalb der Alert-Ebene — ein Overlay im SwiftUI-Baum liegt unter Sheets,
+/// Alerts und Popovers und wuerde deren Inhalte nicht verdecken.
+@MainActor
+private final class LockWindowPresenter {
+    static let shared = LockWindowPresenter()
+
+    private var window: UIWindow?
+    private var hostingController: UIHostingController<LockWindowRootView>?
+
+    func update(content: LockWindowContent, isSceneActive: Bool, onUnlock: @escaping () -> Void) {
+        let rootView = LockWindowRootView(content: content, isSceneActive: isSceneActive, onUnlock: onUnlock)
+
+        guard content != .hidden else {
+            hostingController?.rootView = rootView
+            window?.isHidden = true
+            return
+        }
+
+        if let hostingController, let window, window.windowScene != nil {
+            hostingController.rootView = rootView
+        } else {
+            guard let scene = Self.targetScene() else {
+                AppLog.ui.error("🔒 Keine UIWindowScene fuer das Sperrfenster gefunden")
+                return
+            }
+            let controller = UIHostingController(rootView: rootView)
+            controller.view.backgroundColor = .clear
+            // VoiceOver bleibt im Sperrfenster
+            controller.view.accessibilityViewIsModal = true
+            let newWindow = UIWindow(windowScene: scene)
+            newWindow.windowLevel = .alert + 1
+            newWindow.rootViewController = controller
+            newWindow.isHidden = true
+            window = newWindow
+            hostingController = controller
+        }
+
+        guard let window else { return }
+        window.overrideUserInterfaceStyle = Self.interfaceStyle
+        if window.isHidden {
+            // Offene Tastatur (z.B. in einem Sheet) schliessen — sie laege sonst ueber der Sperre
+            _ = UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            window.isHidden = false
+        }
+    }
+
+    private static func targetScene() -> UIWindowScene? {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return scenes.first { $0.activationState == .foregroundActive }
+            ?? scenes.first { $0.activationState == .foregroundInactive }
+            ?? scenes.first
+    }
+
+    /// Eigenes Fenster erbt .preferredColorScheme der App nicht — Theme direkt setzen.
+    private static var interfaceStyle: UIUserInterfaceStyle {
+        switch AppSettings.appTheme {
+        case .system: return .unspecified
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
 }
 
 struct EmptyStateView: View {

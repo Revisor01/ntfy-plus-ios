@@ -16,7 +16,7 @@ enum CachedFormatters {
         return formatter
     }()
 
-    nonisolated(unsafe) static let mediumDateShortTime: DateFormatter = {
+    static let mediumDateShortTime: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .short
@@ -24,21 +24,21 @@ enum CachedFormatters {
         return formatter
     }()
 
-    nonisolated(unsafe) static let shortTime: DateFormatter = {
+    static let shortTime: DateFormatter = {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         formatter.locale = Locale(identifier: "de_DE")
         return formatter
     }()
 
-    nonisolated(unsafe) static let shortDate: DateFormatter = {
+    static let shortDate: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "dd.MM.yy"
         formatter.locale = Locale(identifier: "de_DE")
         return formatter
     }()
 
-    nonisolated(unsafe) static let amzDate: DateFormatter = {
+    static let amzDate: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -371,15 +371,16 @@ enum TopicActions {
         // SSE-Abo beenden
         ntfyService.unsubscribe(serverURL: serverURL, topic: topicName)
 
-        // FCM-Topics sind nur ueber den Namen adressiert — nur abmelden, wenn kein
+        // FCM-Abo immer ueber FirebaseService abmelden: der pflegt die Topic→Server-Map
+        // und meldet das FCM-Topic erst ab, wenn kein anderer Server denselben Namen nutzt.
+        FirebaseService.shared.unsubscribeFromTopic(serverURL: serverURL, topic: topicName)
+
+        // Gruppierte Mitteilungen (threadIdentifier = Name) nur entfernen, wenn kein
         // anderes Topic gleichen Namens (auf einem anderen Server) uebrig bleibt.
         let sameNamePredicate = #Predicate<Topic> { other in
             other.name == topicName && other.id != topicId
         }
         let sameNameCount = (try? context.fetchCount(FetchDescriptor<Topic>(predicate: sameNamePredicate))) ?? 0
-        if sameNameCount == 0 {
-            FirebaseService.shared.unsubscribeFromTopic(serverURL: serverURL, topic: topicName)
-        }
 
         // Nachrichten des Topics loeschen (inkl. zugehoeriger Benachrichtigungen)
         let messagePredicate = #Predicate<StoredMessage> { message in

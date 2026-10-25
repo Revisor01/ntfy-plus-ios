@@ -72,6 +72,9 @@ enum DeviceAuth {
 // MARK: - Lock Screen
 
 struct LockScreenView: View {
+    /// Automatische Authentifizierung nur bei aktiver Szene — im Zustand .inactive
+    /// (App-Start, Rueckkehr aus dem Hintergrund) schlaegt der Dialog sonst fehl.
+    let isSceneActive: Bool
     let onUnlock: () -> Void
 
     @State private var errorMessage: String?
@@ -79,6 +82,14 @@ struct LockScreenView: View {
     /// true, wenn das Geraet gar keinen Code hat — dann gibt es keinen Entsperr-Weg
     @State private var passcodeNotSet = false
     @State private var biometry: LABiometryType = .none
+    /// Automatisch nur einmal pro Sperre authentifizieren — die Rueckkehr aus dem
+    /// Face-ID-/Code-Dialog (inactive → active) soll keinen neuen Dialog oeffnen.
+    @State private var hasAutoAuthenticated = false
+
+    init(isSceneActive: Bool = true, onUnlock: @escaping () -> Void) {
+        self.isSceneActive = isSceneActive
+        self.onUnlock = onUnlock
+    }
 
     var body: some View {
         ZStack {
@@ -133,8 +144,17 @@ struct LockScreenView: View {
         }
         .onAppear {
             biometry = DeviceAuth.biometryType()
-            authenticate()
+            autoAuthenticateIfActive()
         }
+        .onChange(of: isSceneActive) {
+            autoAuthenticateIfActive()
+        }
+    }
+
+    private func autoAuthenticateIfActive() {
+        guard isSceneActive, !hasAutoAuthenticated else { return }
+        hasAutoAuthenticated = true
+        authenticate()
     }
 
     private func authenticate() {

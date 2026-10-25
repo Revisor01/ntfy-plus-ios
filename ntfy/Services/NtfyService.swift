@@ -77,6 +77,9 @@ private enum SSEConfig {
     static let maxBackoffSeconds: UInt64 = 60
     /// Bei 429 nicht schneller als alle 30 s erneut versuchen
     static let rateLimitBackoffSeconds: UInt64 = 30
+    /// Erst eine so lange stabile Verbindung setzt den Backoff zurueck — sonst fuehren
+    /// Server, die nach HTTP 200 sofort schliessen, zu einer Reconnect-Schleife im Sekundentakt.
+    static let stableConnectionSeconds: TimeInterval = 30
     /// Anzahl zuletzt gesehener Event-IDs fuer die Dedup nach Reconnect (since=<id>)
     static let dedupWindow = 200
 }
@@ -225,8 +228,8 @@ final class NtfyService {
     var connectionError: NtfyError?
     var connectionStatus: ConnectionStatus = .disconnected
 
-    private var pathMonitor: NWPathMonitor?
-    private var monitorQueue = DispatchQueue(label: "de.godsapp.ntfy.networkmonitor")
+    @ObservationIgnored private var pathMonitor: NWPathMonitor?
+    @ObservationIgnored private var monitorQueue = DispatchQueue(label: "de.godsapp.ntfy.networkmonitor")
 
     enum ConnectionStatus: Equatable {
         case connected
@@ -551,6 +554,8 @@ final class NtfyService {
             }
 
             while !Task.isCancelled {
+                // Zeitpunkt des HTTP 200 dieses Versuchs — fuer den Backoff-Reset
+                var connectedAt: Date?
                 var queryItems: [URLQueryItem] = []
                 if let since = lastEventId ?? fallbackSince.map({ String($0) }) {
                     queryItems.append(URLQueryItem(name: "since", value: since))
@@ -596,9 +601,8 @@ final class NtfyService {
                             AppLog.network.error("🔌 SSE: Bad response \(statusCode, privacy: .public) for \(capturedTopic, privacy: .private), retry in \(backoffSeconds, privacy: .public)s")
                         }
                     } else {
-                        // Verbindung erfolgreich — Backoff zuruecksetzen
-                        backoffSeconds = 1
-                        attempt = 0
+                        // Verbindung erfolgreich — Backoff erst nach stabiler Laufzeit zuruecksetzen (s.u.)
+                        connectedAt = Date()
                         if lastEventId == nil && fallbackSince == nil {
                             fallbackSince = Int(Date().timeIntervalSince1970)
                         }
@@ -650,15 +654,21 @@ final class NtfyService {
                             }
                         }
 
-                        AppLog.network.info("🔌 SSE: Stream ended for \(capturedTopic, privacy: .private), reconnecting in \(backoffSeconds, privacy: .public)s")
+                        AppLog.network.info("🔌 SSE: Stream ended for \(capturedTopic, privacy: .private), reconnecting")
                     }
 
                 } catch {
                     if Task.isCancelled { return }
-                    AppLog.network.error("🔌 SSE Error for \(capturedTopic, privacy: .private): \(error.localizedDescription, privacy: .public), retry in \(backoffSeconds, privacy: .public)s")
+                    AppLog.network.error("🔌 SSE Error for \(capturedTopic, privacy: .private): \(error.localizedDescription, privacy: .public), retrying")
                 }
 
                 if Task.isCancelled { return }
+
+                // Nur eine laenger stabile Verbindung setzt den Backoff zurueck
+                if let connectedAt, Date().timeIntervalSince(connectedAt) >= SSEConfig.stableConnectionSeconds {
+                    backoffSeconds = 1
+                    attempt = 0
+                }
 
                 // Backoff-Sleep
                 attempt += 1
@@ -748,8 +758,9 @@ final class NtfyService {
 
     // MARK: - Network Monitoring
 
-    private var reconnectTask: Task<Void, Never>?
-    nonisolated(unsafe) private var lastPathSatisfied = true
+    @ObservationIgnored private var reconnectTask: Task<Void, Never>?
+    /// Wird im pathUpdateHandler auf der Monitor-Queue gelesen/geschrieben
+    @ObservationIgnored nonisolated(unsafe) private var lastPathSatisfied = true
 
     func startNetworkMonitor() {
         pathMonitor = NWPathMonitor()
