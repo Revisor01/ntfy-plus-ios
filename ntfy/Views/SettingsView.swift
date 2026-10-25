@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import LocalAuthentication
+import UserNotifications
 
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
@@ -13,7 +14,9 @@ struct SettingsView: View {
     @State private var selectedTheme = AppSettings.appTheme
     @State private var hapticFeedback = AppSettings.hapticFeedback
     @State private var biometricLockEnabled = AppSettings.biometricLockEnabled
-    @State private var notificationsEnabled = AppSettings.notificationsEnabled
+    /// Tatsaechlicher Berechtigungsstatus aus UNUserNotificationCenter
+    /// (wird beim Anzeigen und bei Rueckkehr in die App aktualisiert)
+    @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
 
     @State private var retentionDays = AppSettings.messageRetentionDays
     @State private var showingDeleteConfirmation = false
@@ -122,23 +125,22 @@ struct SettingsView: View {
 
                 // Notifications
                 Section {
-                    Toggle("Benachrichtigungen", isOn: $notificationsEnabled)
-                        .onChange(of: notificationsEnabled) { _, newValue in
-                            AppSettings.notificationsEnabled = newValue
-                            if newValue {
-                                Task {
-                                    _ = await NotificationService.shared.requestAuthorization()
-                                }
-                            } else {
-                                NotificationService.shared.removeAllNotifications()
-                            }
-                        }
+                    Toggle("Benachrichtigungen", isOn: Binding(
+                        get: { notificationsAuthorized },
+                        set: { setNotificationsEnabled($0) }
+                    ))
 
                     Button("Benachrichtigungseinstellungen öffnen") {
                         openNotificationSettings()
                     }
                 } header: {
                     Text("Benachrichtigungen")
+                } footer: {
+                    if notificationStatus == .denied {
+                        Text("Mitteilungen sind in den iOS-Einstellungen deaktiviert. Aktiviere sie dort, um Push-Benachrichtigungen zu erhalten.")
+                    } else if notificationsAuthorized {
+                        Text("Mitteilungen lassen sich in den iOS-Einstellungen deaktivieren.")
+                    }
                 }
 
                 // Data management
@@ -242,6 +244,13 @@ struct SettingsView: View {
             .task {
                 cacheSize = AttachmentImageCache.shared.diskCacheSize()
                 refreshMessageCount()
+                await refreshNotificationStatus()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
+                // Rueckkehr aus den iOS-Einstellungen bzw. nach dem Berechtigungsdialog
+                Task {
+                    await refreshNotificationStatus()
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -371,6 +380,44 @@ struct SettingsView: View {
     private func openNotificationSettings() {
         if let url = URL(string: UIApplication.openSettingsURLString) {
             UIApplication.shared.open(url)
+        }
+    }
+
+    // MARK: - Mitteilungs-Berechtigung
+
+    private var notificationsAuthorized: Bool {
+        switch notificationStatus {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func refreshNotificationStatus() async {
+        let status = await NotificationService.shared.checkAuthorizationStatus()
+        notificationStatus = status
+        // Veraltetes Flag nur noch spiegeln (wird nirgends mehr ausgewertet)
+        AppSettings.notificationsEnabled = notificationsAuthorized
+    }
+
+    /// Einschalten fragt die Berechtigung an (bzw. oeffnet bei Ablehnung die
+    /// iOS-Einstellungen). Entziehen laesst sich die Berechtigung nur dort.
+    private func setNotificationsEnabled(_ enabled: Bool) {
+        if enabled {
+            switch notificationStatus {
+            case .notDetermined:
+                Task {
+                    _ = await NotificationService.shared.requestAuthorization()
+                    await refreshNotificationStatus()
+                }
+            case .authorized, .provisional, .ephemeral:
+                break
+            default:
+                openNotificationSettings()
+            }
+        } else if notificationsAuthorized {
+            openNotificationSettings()
         }
     }
 }
