@@ -6,6 +6,8 @@ import SwiftUI
 struct WidgetEntry: TimelineEntry {
     let date: Date
     let messages: [WidgetMessage]
+    /// Tatsaechliche Anzahl ungelesener Nachrichten (`messages` enthaelt nur die neuesten 10)
+    let unreadCount: Int
 }
 
 struct WidgetMessage: Identifiable, Codable {
@@ -32,18 +34,43 @@ struct WidgetMessage: Identifiable, Codable {
 
 // MARK: - App Group Data Reading
 
-private func readWidgetMessages() -> [WidgetMessage] {
+/// Format von widget_data.json (geschrieben von NtfyService.writeWidgetData)
+private struct WidgetPayload: Decodable {
+    let unreadCount: Int?
+    let messages: [WidgetMessage]
+}
+
+private struct WidgetData {
+    let messages: [WidgetMessage]
+    let unreadCount: Int
+
+    static var empty: WidgetData { WidgetData(messages: [], unreadCount: 0) }
+}
+
+private func readWidgetData() -> WidgetData {
     guard let containerURL = FileManager.default.containerURL(
         forSecurityApplicationGroupIdentifier: "group.de.godsapp.ntfy"
-    ) else { return [] }
+    ) else { return .empty }
 
     let fileURL = containerURL.appendingPathComponent("widget_data.json")
 
-    guard let data = try? Data(contentsOf: fileURL),
-          let messages = try? JSONDecoder().decode([WidgetMessage].self, from: data) else {
-        return []
+    guard let data = try? Data(contentsOf: fileURL) else { return .empty }
+
+    let decoder = JSONDecoder()
+    if let payload = try? decoder.decode(WidgetPayload.self, from: data) {
+        let count = max(payload.unreadCount ?? payload.messages.count, payload.messages.count)
+        return WidgetData(messages: payload.messages, unreadCount: count)
     }
-    return messages
+    // Frueheres Format: reines Array (max. 10 Eintraege)
+    if let messages = try? decoder.decode([WidgetMessage].self, from: data) {
+        return WidgetData(messages: messages, unreadCount: messages.count)
+    }
+    return .empty
+}
+
+private func makeEntry(date: Date = Date()) -> WidgetEntry {
+    let widgetData = readWidgetData()
+    return WidgetEntry(date: date, messages: widgetData.messages, unreadCount: widgetData.unreadCount)
 }
 
 // MARK: - Timeline Provider
@@ -55,16 +82,15 @@ struct NtfyTimelineProvider: TimelineProvider {
             WidgetMessage(messageId: "preview", topic: "ha-alerts",
                           title: "Bewegungsmelder", message: "Keller ausgelöst",
                           time: Int(Date().timeIntervalSince1970), priority: 3)
-        ])
+        ], unreadCount: 1)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (WidgetEntry) -> Void) {
-        completion(WidgetEntry(date: Date(), messages: readWidgetMessages()))
+        completion(makeEntry())
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<WidgetEntry>) -> Void) {
-        let messages = readWidgetMessages()
-        let entry = WidgetEntry(date: Date(), messages: messages)
+        let entry = makeEntry()
 
         // Alle 15 Minuten neu laden (zusätzlich zu WidgetCenter.reloadAllTimelines())
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
@@ -84,9 +110,11 @@ struct SmallWidgetView: View {
                 .font(.system(size: 22))
                 .foregroundStyle(.blue)
 
-            Text("\(entry.messages.count)")
+            Text("\(entry.unreadCount)")
                 .font(.system(size: 34, weight: .bold, design: .rounded))
                 .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
 
             Text("ungelesen")
                 .font(.system(size: 11, weight: .medium))
@@ -241,7 +269,7 @@ struct NtfyWidgetEntryView: View {
 } timeline: {
     WidgetEntry(date: Date(), messages: [
         WidgetMessage(messageId: "1", topic: "ha-alerts", title: "Test", message: "Body", time: Int(Date().timeIntervalSince1970), priority: 4)
-    ])
+    ], unreadCount: 42)
 }
 
 #Preview(as: .systemMedium) {
@@ -251,5 +279,5 @@ struct NtfyWidgetEntryView: View {
         WidgetMessage(messageId: "1", topic: "ha-alerts", title: "Bewegungsmelder", message: "Keller", time: Int(Date().timeIntervalSince1970), priority: 4),
         WidgetMessage(messageId: "2", topic: "uptime", title: "Service down", message: "push.godsapp.de", time: Int(Date().timeIntervalSince1970) - 300, priority: 5),
         WidgetMessage(messageId: "3", topic: "plex", title: "Wiedergabe", message: "Breaking Bad S01E01", time: Int(Date().timeIntervalSince1970) - 1800, priority: 3)
-    ])
+    ], unreadCount: 3)
 }

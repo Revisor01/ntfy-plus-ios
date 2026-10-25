@@ -10,6 +10,9 @@ import Security
 //   FirebaseService.subscribeToTopic/unsubscribeFromTopic in der App.
 // - `badge_count.txt`: aktueller Badge-Stand; die App schreibt den massgeblichen Wert
 //   bei jedem setBadgeCount, die NSE inkrementiert davon ausgehend.
+// - `mutedTopicKeys` / `mutedTopicNames` (UserDefaults): stummgeschaltete Topics als
+//   "<serverURL>|<name>" bzw. Namen, bei denen ALLE gleichnamigen Topics stumm sind —
+//   gepflegt von ContentView (MutedTopicsSync) in der App.
 // - `pending-messages/<id>.json`: von der NSE empfangene Nachrichten, die die App beim
 //   Aktivwerden in SwiftData importiert. Format:
 //   { "serverURL": String?, "message": { ntfy-JSON-Felder, kompatibel zu NtfyMessage } }
@@ -18,6 +21,8 @@ enum SharedStore {
     static let appGroup = "group.de.godsapp.ntfy"
     static let topicServersKey = "topicServers"
     static let pendingDirectoryName = "pending-messages"
+    static let mutedTopicKeysKey = "mutedTopicKeys"
+    static let mutedTopicNamesKey = "mutedTopicNames"
 
     static var containerURL: URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
@@ -29,6 +34,21 @@ enum SharedStore {
     static func servers(for topic: String) -> [String] {
         let map = UserDefaults(suiteName: appGroup)?.dictionary(forKey: topicServersKey)
         return map?[topic] as? [String] ?? []
+    }
+
+    // MARK: Stummgeschaltete Topics
+
+    /// true, wenn das Topic in der App stummgeschaltet ist. Mit bekanntem Server wird
+    /// exakt (Server + Name) verglichen, sonst nur ueber den Namen — der gilt nur dann
+    /// als stumm, wenn alle gleichnamigen Topics stumm sind.
+    static func isMuted(topic: String, serverURL: String?) -> Bool {
+        guard !topic.isEmpty, let defaults = UserDefaults(suiteName: appGroup) else { return false }
+        if let serverURL {
+            let keys = defaults.stringArray(forKey: mutedTopicKeysKey) ?? []
+            return keys.contains("\(serverURL)|\(topic)")
+        }
+        let names = defaults.stringArray(forKey: mutedTopicNamesKey) ?? []
+        return names.contains(topic)
     }
 
     // MARK: Badge
