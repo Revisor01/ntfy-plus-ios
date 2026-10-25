@@ -22,7 +22,7 @@ iOS 27 als Mindestversion, neue Sende- und Push-Funktionen. Build 8.
 - HTTP-Actions: Bestätigungsdialog mit Methode, Ziel, Header-Namen und Body-Vorschau;
   anschließend Erfolgs- oder Fehlermeldung
 - Tap auf eine Mitteilung beim Kaltstart öffnet das Topic (nach dem Entsperren)
-- CodeQL läuft wieder (neuer Workflow-Pfad, Xcode 27), Dependabot auch für Swift-Pakete
+- CodeQL-Analyse läuft wieder (neuer Workflow-Pfad), Dependabot auch für Swift-Pakete
 
 ### Changed
 
