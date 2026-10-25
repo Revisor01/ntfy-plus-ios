@@ -965,6 +965,7 @@ final class NtfyService {
             existing.priority = message.priority ?? 3
             existing.clickURL = message.click
             existing.iconURL = message.icon
+            existing.isMarkdown = message.isMarkdown
             if let attachment = message.attachment {
                 existing.attachmentData = try? JSONEncoder().encode(StoredAttachment(from: attachment))
             }
@@ -1003,6 +1004,7 @@ final class NtfyService {
             target.priority = message.priority ?? 3
             target.clickURL = message.click
             target.iconURL = message.icon
+            target.isMarkdown = message.isMarkdown
             target.attachmentData = message.attachment.flatMap { try? JSONEncoder().encode(StoredAttachment(from: $0)) }
             if let actions = message.actions, !actions.isEmpty {
                 target.actionsData = try? JSONEncoder().encode(actions.map { StoredAction(from: $0) })
