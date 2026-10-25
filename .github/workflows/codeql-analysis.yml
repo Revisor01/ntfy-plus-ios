@@ -31,6 +31,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # Pakete VOR dem CodeQL-Init aufloesen: der CodeQL-Tracer injiziert sich sonst in
+      # SwiftPMs sandbox-exec (Manifest-Laden) und scheitert mit "Bad CPU type in executable"
+      - name: Swift-Pakete aufloesen
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project ntfy-ios.xcodeproj \
+            -scheme ntfy \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages"
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
@@ -69,6 +78,8 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
+            -disableAutomaticPackageResolution \
+            -skipPackagePluginValidation \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \

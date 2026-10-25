@@ -12,7 +12,12 @@ updates:
       actions:
         patterns: ["*"]
 
-  # Swift/SPM (Firebase) fehlt bewusst: Dependabot braucht dafür
-  # ntfy-ios.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
-  # im Repo, das per .gitignore ausgeschlossen ist. Sobald es eingecheckt ist,
-  # hier "package-ecosystem: swift" ergänzen.
+  # Swift Package Manager (Firebase) ueber die eingecheckte Package.resolved
+  # des Xcode-Projekts
+  - package-ecosystem: swift
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: chore(deps)
