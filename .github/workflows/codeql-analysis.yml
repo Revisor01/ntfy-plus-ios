@@ -35,6 +35,10 @@ jobs:
       # SwiftPMs sandbox-exec (Manifest-Laden) und scheitert mit "Bad CPU type in executable"
       - name: Swift-Pakete aufloesen
         run: |
+          # Manifest-Sandbox aus: der CodeQL-Tracer kann sich nicht in /usr/bin/sandbox-exec
+          # injizieren ("Bad CPU type in executable"), auch nicht beim Build selbst
+          defaults write com.apple.dt.Xcode IDEPackageSupportDisableManifestSandbox -bool YES
+          defaults write com.apple.dt.Xcode IDEPackageSupportDisablePluginExecutionSandbox -bool YES
           xcodebuild -resolvePackageDependencies \
             -project ntfy-ios.xcodeproj \
             -scheme ntfy \
