@@ -129,24 +129,19 @@ final class PollRequestFetcher {
         return request
     }
 
-    /// Antwort ist newline-delimited JSON. Bevorzugt die Nachricht mit der poll_id,
-    /// sonst die erste "message".
+    /// Antwort ist newline-delimited JSON. Akzeptiert ausschliesslich die Nachricht
+    /// mit der poll_id — eine andere Nachricht wuerde falschen Inhalt anzeigen.
     private static func parseMessage(data: Data, pollId: String) -> [String: Any]? {
         guard let text = String(data: data, encoding: .utf8) else { return nil }
-        var firstMessage: [String: Any]?
         for line in text.split(separator: "\n") {
             guard let lineData = String(line).data(using: .utf8),
                   let object = (try? JSONSerialization.jsonObject(with: lineData)) as? [String: Any],
-                  object["event"] as? String == "message" else {
+                  object["event"] as? String == "message",
+                  object["id"] as? String == pollId else {
                 continue
             }
-            if object["id"] as? String == pollId {
-                return object
-            }
-            if firstMessage == nil {
-                firstMessage = object
-            }
+            return object
         }
-        return firstMessage
+        return nil
     }
 }
