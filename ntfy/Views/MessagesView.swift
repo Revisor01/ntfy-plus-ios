@@ -19,8 +19,11 @@ struct MessagesView: View {
     @State private var showOnlyStarred = false
     /// Entprellt das Badge-Update, wenn beim Scrollen viele Nachrichten als gelesen markiert werden
     @State private var badgeUpdateTask: Task<Void, Never>?
+    /// Waehrend der App-Sperre eingeblendete Zeilen — werden erst nach dem Entsperren als gelesen markiert
+    @State private var deferredReadIds: Set<PersistentIdentifier> = []
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.isAppLocked) private var isAppLocked
 
     init(topic: Topic) {
         self.topic = topic
@@ -163,6 +166,14 @@ struct MessagesView: View {
         .task {
             await ntfyService.refreshTopics([topic], context: modelContext, since: "168h")
         }
+        .onChange(of: isAppLocked) { _, locked in
+            guard !locked, !deferredReadIds.isEmpty else { return }
+            let pendingIds = deferredReadIds
+            deferredReadIds.removeAll()
+            for message in messages where pendingIds.contains(message.persistentModelID) {
+                markAsRead(message)
+            }
+        }
     }
 
     private func messageList(_ visibleMessages: [StoredMessage]) -> some View {
@@ -170,7 +181,12 @@ struct MessagesView: View {
             ForEach(visibleMessages) { message in
                 MessageRow(message: message)
                     .onAppear {
-                        markAsRead(message)
+                        // Hinter der App-Sperre nichts als gelesen markieren
+                        if isAppLocked {
+                            deferredReadIds.insert(message.persistentModelID)
+                        } else {
+                            markAsRead(message)
+                        }
                     }
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
@@ -348,14 +364,15 @@ struct MessagesView: View {
         TopicActions.remove(topic, context: modelContext, ntfyService: ntfyService)
     }
 
-    /// Badge-Update entprellen: viele markAsRead-Aufrufe beim Scrollen
-    /// resultieren in einem einzigen fetchCount.
+    /// Badge- und Widget-Update entprellen: viele markAsRead-Aufrufe beim Scrollen
+    /// resultieren in einem einzigen fetchCount bzw. Widget-Reload.
     private func scheduleBadgeUpdate() {
         badgeUpdateTask?.cancel()
         let context = modelContext
         badgeUpdateTask = Task {
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
+            NtfyService.shared.writeWidgetData(context: context)
             await TopicActions.updateBadge(context: context)
         }
     }
