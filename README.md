@@ -5,7 +5,8 @@
 <h1 align="center">ntfy+</h1>
 
 <p align="center">
-  Native iOS-App für <a href="https://ntfy.sh">ntfy</a> Push-Benachrichtigungen.
+  Die iPhone-App für <a href="https://ntfy.sh">ntfy</a> — Benachrichtigungen vom eigenen<br>
+  oder öffentlichen ntfy-Server empfangen und selbst welche senden.
 </p>
 
 <p align="center">
@@ -16,134 +17,116 @@
   <img src="https://img.shields.io/github/v/release/Revisor01/ntfy-plus-ios" alt="Version">
 </p>
 
-<p align="center">
-  <a href="#features">Features</a> •
-  <a href="#installation">Installation</a> •
-  <a href="#konfiguration">Konfiguration</a> •
-  <a href="#mitwirken">Mitwirken</a>
-</p>
+## Worum es geht
 
----
+ntfy ist ein einfacher Dienst für Push-Benachrichtigungen: Ein Skript, ein
+Server oder ein Smart Home schickt eine Nachricht per HTTP an ein Topic, und
+jedes Gerät, das dieses Topic abonniert hat, bekommt sie.
 
-## Features
+ntfy+ ist eine eigene iPhone-App dafür, mit eigenem Server oder ntfy.sh. Topics
+lassen sich gestalten, Nachrichten auch selbst senden, und geschützte Topics
+funktionieren mit Benutzername und Passwort oder Access Token.
 
-- **Self-Hosted Support**: Nutze ntfy.sh oder deinen eigenen ntfy-Server
-- **Echtzeit-Benachrichtigungen**: Sofortige Push-Nachrichten via SSE
-- **App-Icons**: Zeigt Icons aus Nachrichten an (z.B. Sonarr, Radarr, Home Assistant)
-- **Topic-Anpassung**: Eigene Farben, Buchstaben oder Icons pro Topic
-- **Prioritäten**: Visuelle Badges für dringende Nachrichten
-- **Authentifizierung**: Unterstützt Benutzername/Passwort und Access Tokens
-- **Offline-Speicherung**: Nachrichten werden lokal gespeichert
-- **Dark Mode**: Vollständige Unterstützung
-- **Native iOS**: SwiftUI, SwiftData, iOS 27+
+## Funktionen
 
-## Voraussetzungen
-
-- iOS 27.0+
-- ntfy-Server (self-hosted oder ntfy.sh)
+- **Eigener Server oder ntfy.sh** — mehrere Server nebeneinander
+- **Echtzeit** — neue Nachrichten über Server-Sent Events, Push auch bei geschlossener App
+- **Geschützte Topics** — Benutzername/Passwort oder Access Token, auch für Push
+- **Senden** — Nachrichten mit Titel, Priorität, Tags, Anhängen (Fotos und Dateien bis
+  15 MB) und geplantem Zustellzeitpunkt
+- **Anhänge und Icons** — Bildvorschau in der Mitteilung, Icons aus der Nachricht
+  (etwa von Sonarr, Radarr oder Home Assistant)
+- **Aktionen** — Knöpfe aus der Nachricht, HTTP-Aktionen mit Rückfrage vor dem Senden
+- **Topics gestalten** — eigene Farben, Buchstaben oder Icons, stummschalten
+- **Prioritäten** — dringende Nachrichten sichtbar hervorgehoben
+- **Widget** — ungelesene Nachrichten auf dem Home-Bildschirm
+- **App-Sperre** — Sperre und Sichtschutz, auf dem iPad für alle Fenster
+- **Ohne Netz** — Nachrichten bleiben lokal gespeichert
+- Hell und Dunkel, iPhone und iPad
 
 ## Installation
 
-### TestFlight
+Die App ist noch nicht im App Store. Die aktuelle Fassung **2.2 (Build 8)** gibt
+es über TestFlight; Zugang auf Anfrage über die Kontaktadresse unten.
 
-Aktuelle Version: **2.2 (Build 8)** — Zugang auf Anfrage über die unten genannte Kontaktadresse.
+Zum Loslegen braucht es iOS 27 oder neuer und einen ntfy-Server — ntfy.sh ist
+voreingestellt, ein eigener funktioniert genauso.
 
-### Selbst kompilieren
+**Erste Schritte:** App starten; die Einrichtung führt durch Server, optionale
+Anmeldung und das erste Topic.
 
-1. Repository klonen:
-   ```bash
-   git clone https://github.com/Revisor01/ntfy-plus-ios.git
-   ```
-2. `ntfy-ios.xcodeproj` in Xcode öffnen
-3. Team/Signing konfigurieren
-4. Auf dem Gerät bauen und ausführen
+## Versionen
 
-## Konfiguration
+Was sich wann geändert hat, steht in [CHANGELOG.md](CHANGELOG.md) — nach
+[Keep a Changelog](https://keepachangelog.com/de/1.1.0/), aus Sicht der
+Nutzer:innen geschrieben. Die
+[Releases](https://github.com/Revisor01/ntfy-plus-ios/releases) fassen jede
+Version zusammen.
 
-1. **App starten** - Der Onboarding-Flow führt durch die Einrichtung
-2. **Server eingeben** - ntfy.sh ist voreingestellt, eigene Server funktionieren auch
-3. **Authentifizierung** - Optional, nur wenn der Server es erfordert
-4. **Topics abonnieren** - Fertig!
+## Selbst bauen
 
-## Screenshots
+```bash
+git clone https://github.com/Revisor01/ntfy-plus-ios.git
+cd ntfy-plus-ios
+open ntfy-ios.xcodeproj
+```
 
-*Screenshots folgen*
+Xcode 27 oder neuer, Ziel ist iOS 27. Die Swift-Pakete lädt Xcode beim ersten
+Öffnen selbst (Stand in `Package.resolved`). In den Signierungs-Einstellungen
+das eigene Team eintragen. Für Push bei geschlossener App braucht es ein
+eigenes Firebase-Projekt mit `GoogleService-Info.plist`; ohne kommen
+Nachrichten nur, solange die App läuft.
 
-## Technologie
+## Aufbau
 
-- **SwiftUI** - Moderne, deklarative UI
-- **SwiftData** - Persistenz für Topics und Nachrichten
-- **Server-Sent Events** - Echtzeit-Verbindung zum ntfy-Server
-- **Keychain** - Sichere Speicherung von Zugangsdaten
+```
+ntfy-plus-ios
+├── ntfy/                         — die App: Views, Models (SwiftData), Services
+│                                   (ntfy-API, SSE, Push, Schlüsselbund)
+├── NotificationServiceExtension/ — lädt Inhalte geschützter Topics und Bild-
+│                                   anhänge, bevor die Mitteilung erscheint
+└── NtfyWidget/                   — Widget für den Home-Bildschirm
+```
 
-## Mitwirken
+**Worauf es beim Bauen ankommt:**
+- **Zugangsdaten gehören in den Schlüsselbund**, nie in die Einstellungen.
+- **Keine Zugangsdaten an fremde Hosts** — angemeldet wird nur beim eigenen Server.
+- **Verhalten wie upstream ntfy**, wo das Protokoll es vorgibt (Markdown, Aktionen,
+  Anhänge).
 
-Beiträge sind willkommen! Pull Requests können gerne eingereicht werden.
+## Mitmachen
+
+Fehlermeldungen und Vorschläge sind willkommen — gern als
+[Issue](https://github.com/Revisor01/ntfy-plus-ios/issues); die Vorlage fragt
+nach App- und Server-Version. Sicherheitslücken bitte vertraulich melden, wie in
+[SECURITY.md](SECURITY.md) beschrieben. Pull Requests laufen durch einen Build
+und einen Secret-Scan; die Grundsätze für Beiträge stehen in
+[CLAUDE.md](CLAUDE.md).
+
+## Datenschutz
+
+ntfy+ sammelt nichts für den Entwickler: keine Analyse, keine Werbung.
+Server-Adressen, Zugangsdaten (im Schlüsselbund), Topics, Nachrichten und
+Einstellungen liegen auf dem Gerät und verschwinden mit der App.
+
+Die App spricht mit den ntfy-Servern, die man selbst einträgt. Für
+Push-Mitteilungen bei geschlossener App meldet sie sich bei Apple (APNs) und
+Google Firebase Cloud Messaging an und abonniert dort die Namen der Topics;
+der ntfy-Server stellt Push-Nachrichten über diesen Weg zu.
 
 ## Lizenz
 
-Dieses Projekt steht unter der Apache License 2.0 - siehe [LICENSE](LICENSE) für Details.
-
-## Danksagung
-
-- [ntfy](https://ntfy.sh) von Philipp C. Heckel - Der großartige Open-Source Push-Service
+ntfy+ steht unter der [GNU General Public License v3.0](LICENSE).
 
 ## Hinweis
 
-Dies ist eine inoffizielle Companion-App. ntfy+ ist nicht mit dem ntfy-Projekt verbunden oder von diesem unterstützt.
+ntfy+ ist eine unabhängige App. Sie ist kein offizielles Produkt des
+ntfy-Projekts und wird von ihm weder unterstützt noch geprüft.
 
----
+Dank an [ntfy](https://ntfy.sh) von Philipp C. Heckel — den großartigen
+Open-Source-Dienst, ohne den es diese App nicht gäbe.
 
-## Datenschutzerklärung
+## Kontakt
 
-### Verantwortlicher
-
-Siehe [Impressum](https://github.com/Revisor01/ntfy-plus-ios/issues) oder kontaktiere den Entwickler über GitHub.
-
-### Datenverarbeitung
-
-**ntfy+ speichert und verarbeitet folgende Daten ausschließlich lokal auf deinem Gerät:**
-
-- Server-URLs deiner ntfy-Server
-- Optionale Zugangsdaten (Benutzername/Passwort oder Access Token)
-- Abonnierte Topics und deren Einstellungen
-- Empfangene Nachrichten
-- App-Einstellungen und Präferenzen
-
-**Es werden keine Daten an externe Server übertragen**, außer an die von dir konfigurierten ntfy-Server.
-
-### Keine Tracking- oder Analysedienste
-
-ntfy+ verwendet:
-- Keine Analytics oder Tracking-Tools
-- Keine Werbung
-- Keine Cloud-Dienste (außer deinem ntfy-Server)
-- Keine Drittanbieter-SDKs, die Daten sammeln
-
-### Netzwerkverbindungen
-
-Die App stellt Verbindungen ausschließlich zu den von dir konfigurierten ntfy-Servern her:
-- Abrufen von Nachrichten (HTTPS)
-- Echtzeit-Verbindung für neue Nachrichten (SSE)
-- Senden von Nachrichten (falls genutzt)
-
-### Datenspeicherung
-
-Alle Daten werden lokal gespeichert:
-- **Zugangsdaten**: iOS Keychain (verschlüsselt)
-- **Topics & Nachrichten**: SwiftData (lokal)
-- **Einstellungen**: UserDefaults
-
-Bei Deinstallation der App werden alle Daten vollständig entfernt.
-
-### Deine Rechte (DSGVO)
-
-Da alle Daten ausschließlich lokal auf deinem Gerät gespeichert werden und keine Übertragung an den Entwickler erfolgt, hast du die volle Kontrolle über deine Daten. Du kannst diese jederzeit durch Löschen der App vollständig entfernen.
-
-Bei Fragen zum Datenschutz kannst du dich jederzeit an die oben genannte Kontaktadresse wenden.
-
-### Änderungen
-
-Diese Datenschutzerklärung kann bei Bedarf aktualisiert werden. Die aktuelle Version ist stets in diesem Repository verfügbar.
-
-*Stand: Januar 2026*
+Pastor Simon Luthe · [mail@simonluthe.de](mailto:mail@simonluthe.de) ·
+[simonluthe.de](https://simonluthe.de)
