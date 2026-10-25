@@ -540,7 +540,15 @@ struct ServerEditorView: View {
                         let topicPredicate = #Predicate<Topic> { $0.serverURL == oldURL }
                         let serverTopics = (try? modelContext.fetch(FetchDescriptor<Topic>(predicate: topicPredicate))) ?? []
                         for topic in serverTopics {
+                            let topicName = topic.name
                             topic.serverURL = serverURL
+                            // Alte SSE-Verbindung beenden; FCM/Topic→Server-Map umziehen —
+                            // zuerst neu eintragen, damit der Refcount bei gleichem Namen
+                            // nicht auf 0 faellt und das FCM-Abo bestehen bleibt.
+                            // Das neue SSE-Abo baut ContentView auf (serverConfigurationChanged).
+                            NtfyService.shared.unsubscribe(serverURL: oldURL, topic: topicName)
+                            FirebaseService.shared.subscribeToTopic(serverURL: serverURL, topic: topicName)
+                            FirebaseService.shared.unsubscribeFromTopic(serverURL: oldURL, topic: topicName)
                         }
                         // DeletedMessage-Records ebenfalls umziehen, sonst kommen
                         // geloeschte Nachrichten beim naechsten Refresh zurueck
@@ -596,6 +604,15 @@ struct ServerEditorView: View {
                 }
 
                 try? modelContext.save()
+
+                if isEditing {
+                    // SSE-Abos dieses Servers mit neuer URL bzw. neuen Zugangsdaten neu aufbauen
+                    NotificationCenter.default.post(
+                        name: .serverConfigurationChanged,
+                        object: nil,
+                        userInfo: ["serverURL": serverURL]
+                    )
+                }
                 dismiss()
             }
         }
