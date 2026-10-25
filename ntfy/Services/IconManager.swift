@@ -1,5 +1,98 @@
 import SwiftUI
+import SwiftData
 import Observation
+
+// MARK: - Image Downloader
+
+/// Laedt Bilddaten (Icons, Bild-Anhaenge) mit Groessenlimit. Liegt das Bild auf einem
+/// konfigurierten Server (gleiches Scheme/Host/Port), werden dessen Zugangsdaten
+/// mitgeschickt — so laden auch geschuetzte Anhaenge. Fremde Hosts bekommen keine
+/// Zugangsdaten; bei Redirects auf einen anderen Host entfernt RedirectAuthGuard den
+/// Authorization-Header.
+enum ImageDownloader {
+    /// Maximale Groesse fuer Icons
+    static let iconMaxBytes = 2 * 1024 * 1024
+    /// Maximale Groesse fuer Bild-Anhaenge
+    static let attachmentMaxBytes = 15 * 1024 * 1024
+
+    private static let session: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 120
+        return URLSession(configuration: configuration, delegate: RedirectAuthGuard(), delegateQueue: nil)
+    }()
+
+    /// Liefert die Bilddaten oder nil (Fehler, kein HTTP 200, groesser als `maxBytes`).
+    @MainActor
+    static func loadData(from url: URL, maxBytes: Int) async -> Data? {
+        let authorization = authorizationHeader(for: url)
+        do {
+            return try await fetch(url: url, maxBytes: maxBytes, authorization: authorization)
+        } catch is CancellationError {
+            return nil
+        } catch let error as URLError where error.code == .cancelled {
+            return nil
+        } catch {
+            AppLog.ui.error("❌ Bild konnte nicht geladen werden: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Authorization-Header des konfigurierten Servers mit gleichem Origin wie `url`.
+    @MainActor
+    private static func authorizationHeader(for url: URL) -> String? {
+        guard let container = SharedModel.container else { return nil }
+        let servers = (try? container.mainContext.fetch(FetchDescriptor<Server>())) ?? []
+        for server in servers where RedirectAuthGuard.isSameOrigin(URL(string: server.url), url) {
+            // Gleiche Reihenfolge wie NtfyService.authHeader: Token vor Basic-Auth
+            if let token = KeychainManager.shared.loadToken(serverURL: server.url), !token.isEmpty {
+                return "Bearer \(token)"
+            }
+            if let credentials = KeychainManager.shared.loadCredentials(serverURL: server.url),
+               !credentials.username.isEmpty,
+               let data = "\(credentials.username):\(credentials.password)".data(using: .utf8) {
+                return "Basic \(data.base64EncodedString())"
+            }
+        }
+        return nil
+    }
+
+    /// Streamt die Antwort und bricht ab, sobald das Limit ueberschritten wird
+    /// (Content-Length wird vorab geprueft, falls vorhanden).
+    private static func fetch(url: URL, maxBytes: Int, authorization: String?) async throws -> Data? {
+        var request = URLRequest(url: url)
+        if let authorization {
+            request.setValue(authorization, forHTTPHeaderField: "Authorization")
+        }
+
+        let (bytes, response) = try await session.bytes(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            bytes.task.cancel()
+            return nil
+        }
+
+        let expectedLength = httpResponse.expectedContentLength
+        if expectedLength > Int64(maxBytes) {
+            bytes.task.cancel()
+            AppLog.ui.error("❌ Bild zu gross (\(expectedLength, privacy: .public) Bytes) — nicht geladen")
+            return nil
+        }
+
+        var data = Data()
+        if expectedLength > 0 {
+            data.reserveCapacity(Int(expectedLength))
+        }
+        for try await byte in bytes {
+            data.append(byte)
+            if data.count > maxBytes {
+                bytes.task.cancel()
+                AppLog.ui.error("❌ Bild ueberschreitet \(maxBytes, privacy: .public) Bytes — Download abgebrochen")
+                return nil
+            }
+        }
+        return data
+    }
+}
 
 // MARK: - Attachment Image Disk Cache
 
@@ -100,28 +193,19 @@ final class IconManager {
 
         // Start new loading task
         let task = Task<UIImage?, Never> {
-            guard let url = URL(string: urlString) else { return nil }
-
-            do {
-                let (data, response) = try await URLSession.shared.data(from: url)
-
-                guard let httpResponse = response as? HTTPURLResponse,
-                      httpResponse.statusCode == 200,
-                      let image = UIImage(data: data) else {
-                    return nil
-                }
-
-                // Resize if too large
-                let resized = resizeImageIfNeeded(image, maxSize: CGSize(width: 128, height: 128))
-
-                // Cache the result
-                cache.setObject(resized, forKey: urlString as NSString)
-
-                return resized
-            } catch {
-                AppLog.ui.error("Failed to load icon: \(error.localizedDescription, privacy: .public)")
+            guard let url = URL(string: urlString),
+                  let data = await ImageDownloader.loadData(from: url, maxBytes: ImageDownloader.iconMaxBytes),
+                  let image = UIImage(data: data) else {
                 return nil
             }
+
+            // Resize if too large
+            let resized = resizeImageIfNeeded(image, maxSize: CGSize(width: 128, height: 128))
+
+            // Cache the result
+            cache.setObject(resized, forKey: urlString as NSString)
+
+            return resized
         }
 
         loadingTasks[urlString] = task
@@ -259,22 +343,16 @@ struct CachedAsyncImage<Placeholder: View, Failure: View>: View {
                 didFail = true
                 return
             }
-            do {
-                let (data, response) = try await URLSession.shared.data(from: url)
-                guard let httpResponse = response as? HTTPURLResponse,
-                      httpResponse.statusCode == 200,
-                      let downloaded = UIImage(data: data) else {
-                    isLoading = false
-                    didFail = true
-                    return
-                }
-                // Auf Disk speichern
-                AttachmentImageCache.shared.saveToDisk(data, for: urlString)
-                image = downloaded
-            } catch {
-                AppLog.ui.error("❌ CachedAsyncImage disk fetch failed: \(error.localizedDescription, privacy: .public)")
+            // Groessenlimit fuer Anhaenge; Zugangsdaten nur fuer konfigurierte Server
+            guard let data = await ImageDownloader.loadData(from: url, maxBytes: ImageDownloader.attachmentMaxBytes),
+                  let downloaded = UIImage(data: data) else {
+                isLoading = false
                 didFail = true
+                return
             }
+            // Auf Disk speichern
+            AttachmentImageCache.shared.saveToDisk(data, for: urlString)
+            image = downloaded
             isLoading = false
         } else {
             // NSCache-basiertes Verhalten (IconManager)
