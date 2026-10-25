@@ -4,10 +4,17 @@ import SwiftData
 struct MessageRow: View {
     let message: StoredMessage
 
+    @Environment(\.modelContext) private var modelContext
+
     @State private var showingActions = false
     @State private var pendingHTTPAction: StoredAction? = nil
     @State private var showingHTTPConfirmation = false
-    @State private var showCopiedToast = false
+    /// Kurz eingeblendeter Hinweis ("Kopiert!", "Aktion ausgeführt")
+    @State private var toastText: String? = nil
+    /// Laufende HTTP-Aktion — verhindert Doppel-Ausfuehrung
+    @State private var isRunningHTTPAction = false
+    @State private var httpActionError: String? = nil
+    @State private var showingHTTPActionError = false
 
     var body: some View {
         HStack(alignment: .top, spacing: AppSpacing.sm) {
@@ -62,9 +69,11 @@ struct MessageRow: View {
                     }
                 }
 
-                // Message body with Markdown support
+                // Nachrichtentext: Markdown nur, wenn der Server die Nachricht als Markdown
+                // markiert hat (upstream-Verhalten). Aeltere Nachrichten ohne Kennzeichen
+                // (isMarkdown == nil) bleiben wie bisher Markdown-formatiert.
                 if let messageText = message.message, !messageText.isEmpty {
-                    Text(parseMarkdown(messageText))
+                    Text(message.isMarkdown == false ? AttributedString(messageText) : parseMarkdown(messageText))
                         .font(AppFonts.body)
                         .foregroundStyle(.primary)
                         .lineLimit(nil)
@@ -132,8 +141,8 @@ struct MessageRow: View {
         .padding(.vertical, AppSpacing.xs)
         .contentShape(Rectangle())
         .overlay(alignment: .top) {
-            if showCopiedToast {
-                Text("Kopiert!")
+            if let text = toastText {
+                Text(text)
                     .font(AppFonts.caption)
                     .padding(.horizontal, AppSpacing.sm)
                     .padding(.vertical, AppSpacing.xxs)
@@ -142,7 +151,7 @@ struct MessageRow: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .onAppear {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            withAnimation { showCopiedToast = false }
+                            withAnimation { self.toastText = nil }
                         }
                     }
             }
@@ -181,7 +190,8 @@ struct MessageRow: View {
             titleVisibility: .visible
         ) {
             if let action = pendingHTTPAction,
-               let url = URL(string: action.url ?? "") {
+               let urlString = action.url,
+               let url = URL(string: urlString) {
                 Button("Ausführen") {
                     Task {
                         await executeHTTPAction(action, url: url)
@@ -193,9 +203,16 @@ struct MessageRow: View {
                 pendingHTTPAction = nil
             }
         } message: {
-            if let url = pendingHTTPAction?.url {
-                Text(url)
+            if let action = pendingHTTPAction {
+                Text(httpActionSummary(action))
             }
+        }
+        .alert("HTTP-Aktion fehlgeschlagen", isPresented: $showingHTTPActionError) {
+            Button("OK", role: .cancel) {
+                httpActionError = nil
+            }
+        } message: {
+            Text(httpActionError ?? "")
         }
     }
 
@@ -248,60 +265,74 @@ struct MessageRow: View {
 
     @ViewBuilder
     private func attachmentView(attachment: StoredAttachment, url: String) -> some View {
-        if attachment.isImage {
-            // Expiry-Check: vor dem Laden prüfen ob URL schon abgelaufen
-            if let expiry = URL(string: url)?.expiryDate, expiry < Date() {
-                expiredAttachmentPlaceholder
-            } else {
-                // Image attachment - show inline (Disk-Cache: kein Neuladen beim Scrollen)
-                VStack(alignment: .leading, spacing: 0) {
-                    CachedAsyncImage(
-                        url: url,
-                        useDiskCache: true,
-                        content: { image in
-                            AnyView(
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(maxHeight: 250)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                                    }
-                                    .onTapGesture {
-                                        openURL(url)
-                                    }
-                            )
-                        },
-                        placeholder: {
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.secondary.opacity(0.1))
-                                .frame(height: 150)
-                                .overlay { ProgressView() }
-                        },
-                        failure: {
-                            attachmentFileRow(attachment: attachment, url: url, icon: "photo", color: AppColors.primary)
-                        }
-                    )
-                    // Expiry-Indikator unter dem Bild (nur wenn URL noch nicht abgelaufen)
-                    if let expiry = URL(string: url)?.expiryDate, expiry > Date() {
-                        Text(expiryLabel(expiry))
-                            .font(AppFonts.caption)
-                            .foregroundStyle(.orange)
-                            .padding(.top, AppSpacing.xxs)
+        // Ablauf vor dem Laden pruefen (ntfy `attachment.expires` bzw. signierte URL),
+        // statt eine garantiert fehlschlagende Anfrage zu starten
+        let expiry = attachmentExpiry(attachment: attachment, url: url)
+        if let expiry, expiry <= Date() {
+            expiredAttachmentPlaceholder(attachment: attachment)
+        } else if attachment.isImage {
+            // Image attachment - show inline (Disk-Cache: kein Neuladen beim Scrollen)
+            VStack(alignment: .leading, spacing: 0) {
+                CachedAsyncImage(
+                    url: url,
+                    useDiskCache: true,
+                    content: { image in
+                        AnyView(
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(maxHeight: 250)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                                }
+                                .onTapGesture {
+                                    openURL(url)
+                                }
+                        )
+                    },
+                    placeholder: {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.secondary.opacity(0.1))
+                            .frame(height: 150)
+                            .overlay { ProgressView() }
+                    },
+                    failure: {
+                        attachmentFileRow(attachment: attachment, url: url, icon: "photo", color: AppColors.primary)
                     }
+                )
+                // Expiry-Indikator unter dem Bild (nur solange noch nicht abgelaufen)
+                if let expiry {
+                    Text(expiryLabel(expiry))
+                        .font(AppFonts.caption)
+                        .foregroundStyle(.orange)
+                        .padding(.top, AppSpacing.xxs)
                 }
             }
         } else {
             // Non-image attachment - show as downloadable file
             let icon = iconForFileType(attachment.type)
-            attachmentFileRow(attachment: attachment, url: url, icon: icon.0, color: icon.1)
+            VStack(alignment: .leading, spacing: 0) {
+                attachmentFileRow(attachment: attachment, url: url, icon: icon.0, color: icon.1)
+                if let expiry {
+                    Text(expiryLabel(expiry))
+                        .font(AppFonts.caption)
+                        .foregroundStyle(.orange)
+                        .padding(.top, AppSpacing.xxs)
+                }
+            }
         }
     }
 
+    /// Fruehester bekannter Ablaufzeitpunkt: ntfy `attachment.expires` oder Ablauf der signierten URL
+    private func attachmentExpiry(attachment: StoredAttachment, url: String) -> Date? {
+        let candidates: [Date] = [attachment.expiryDate, URL(string: url)?.expiryDate].compactMap { $0 }
+        return candidates.min()
+    }
+
     @ViewBuilder
-    private var expiredAttachmentPlaceholder: some View {
+    private func expiredAttachmentPlaceholder(attachment: StoredAttachment) -> some View {
         HStack(spacing: AppSpacing.sm) {
             Image(systemName: "clock.badge.xmark")
                 .font(.title2)
@@ -310,7 +341,11 @@ struct MessageRow: View {
                 Text("Anhang abgelaufen")
                     .font(AppFonts.subheadline)
                     .foregroundStyle(.secondary)
-                Text("Die Download-URL ist nicht mehr gültig.")
+                Text(attachment.fileName)
+                    .font(AppFonts.caption)
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                Text("Der Anhang ist nicht mehr abrufbar.")
                     .font(AppFonts.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -319,6 +354,7 @@ struct MessageRow: View {
         .padding(AppSpacing.sm)
         .background(Color.secondary.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
     }
 
     private func expiryLabel(_ expiry: Date) -> String {
@@ -422,6 +458,7 @@ struct MessageRow: View {
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
+        .disabled(action.action == "http" && isRunningHTTPAction)
     }
 
     private func iconForAction(_ action: StoredAction) -> String {
@@ -443,11 +480,12 @@ struct MessageRow: View {
             }
 
         case "http":
-            if action.url != nil, URL(string: action.url!) != nil {
+            if let urlString = action.url, URL(string: urlString) != nil {
                 pendingHTTPAction = action
                 showingHTTPConfirmation = true
-                return   // Haptic-Feedback NICHT auslösen — erst nach Bestätigung
             }
+            // Haptic-Feedback und `clear` erst nach Bestaetigung bzw. erfolgreicher Anfrage
+            return
 
         case "copy":
             let copyValue = action.value ?? action.label
@@ -456,7 +494,10 @@ struct MessageRow: View {
                 let generator = UINotificationFeedbackGenerator()
                 generator.notificationOccurred(.success)
             }
-            withAnimation { showCopiedToast = true }
+            withAnimation { toastText = "Kopiert!" }
+            if action.clear == true {
+                clearAfterAction()
+            }
             return  // Kein weiteres Haptic-Feedback am Ende
 
         default:
@@ -466,6 +507,11 @@ struct MessageRow: View {
             }
         }
 
+        // ntfy `clear: true` — nach dem Antippen als gelesen markieren (view/broadcast)
+        if action.clear == true {
+            clearAfterAction()
+        }
+
         // Haptic feedback
         if AppSettings.hapticFeedback {
             let generator = UIImpactFeedbackGenerator(style: .medium)
@@ -473,9 +519,47 @@ struct MessageRow: View {
         }
     }
 
+    /// Zusammenfassung fuer den Bestaetigungsdialog: Methode, Host+Pfad, Header-Namen, Body-Vorschau
+    private func httpActionSummary(_ action: StoredAction) -> String {
+        let method = (action.method ?? "POST").uppercased()
+        let urlString = action.url ?? ""
+        var target = urlString
+        if let components = URLComponents(string: urlString), let host = components.host {
+            var hostPart = host
+            if let port = components.port {
+                hostPart += ":\(port)"
+            }
+            target = hostPart + components.path
+        }
+
+        var lines: [String] = ["\(method) \(target)"]
+
+        if let headers = action.headers, !headers.isEmpty {
+            // Nur Header-Namen — Werte koennen Zugangsdaten enthalten
+            lines.append("Header: \(headers.keys.sorted().joined(separator: ", "))")
+        }
+
+        if let body = action.body?.trimmed(), !body.isEmpty {
+            let preview = body.count > 200 ? String(body.prefix(200)) + "…" : body
+            lines.append("")
+            lines.append(preview)
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
     private func executeHTTPAction(_ action: StoredAction, url: URL) async {
+        // Nur http/https — keine anderen Schemes aus fremden Nachrichten ansprechen
+        guard url.isSafeWebURL else {
+            AppLog.ui.error("❌ HTTP-Aktion: unsicheres Schema abgelehnt: \(url.scheme ?? "nil", privacy: .public)")
+            showHTTPActionError("Nur http- und https-Adressen werden unterstützt.")
+            return
+        }
+
+        let method = (action.method ?? "POST").uppercased()
         var request = URLRequest(url: url)
-        request.httpMethod = action.method ?? "POST"
+        request.httpMethod = method
+        request.timeoutInterval = 30
 
         // Add headers
         if let headers = action.headers {
@@ -484,22 +568,69 @@ struct MessageRow: View {
             }
         }
 
-        // Add body
-        if let body = action.body {
+        // Add body (GET-Requests mit Body lehnt URLSession ab)
+        if let body = action.body, !body.isEmpty, method != "GET" {
             request.httpBody = body.data(using: .utf8)
         }
 
+        isRunningHTTPAction = true
+        defer { isRunningHTTPAction = false }
+
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse,
-               (200...299).contains(httpResponse.statusCode) {
-                await MainActor.run {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+
+            if (200...299).contains(statusCode) {
+                AppLog.ui.info("✅ HTTP-Aktion erfolgreich (\(statusCode, privacy: .public))")
+                if AppSettings.hapticFeedback {
                     let generator = UINotificationFeedbackGenerator()
                     generator.notificationOccurred(.success)
                 }
+                withAnimation { toastText = "Aktion ausgeführt" }
+                // ntfy: bei http wird nur nach erfolgreicher Anfrage geleert
+                if action.clear == true {
+                    clearAfterAction()
+                }
+            } else {
+                AppLog.ui.error("❌ HTTP-Aktion fehlgeschlagen: HTTP \(statusCode, privacy: .public)")
+                let reason = HTTPURLResponse.localizedString(forStatusCode: statusCode)
+                showHTTPActionError("Der Server antwortete mit HTTP \(statusCode) (\(reason)).")
             }
         } catch {
-            AppLog.ui.error("HTTP action failed: \(error.localizedDescription, privacy: .public)")
+            AppLog.ui.error("❌ HTTP-Aktion fehlgeschlagen: \(error.localizedDescription, privacy: .public)")
+            showHTTPActionError("Die Anfrage konnte nicht ausgeführt werden: \(error.localizedDescription)")
+        }
+    }
+
+    private func showHTTPActionError(_ text: String) {
+        if AppSettings.hapticFeedback {
+            let generator = UINotificationFeedbackGenerator()
+            generator.notificationOccurred(.error)
+        }
+        httpActionError = text
+        showingHTTPActionError = true
+    }
+
+    /// ntfy-Action `clear: true`: Nachricht als gelesen markieren, Zaehler/Badge/Widget
+    /// aktualisieren und die zugestellte Mitteilung entfernen.
+    private func clearAfterAction() {
+        // Nachricht koennte waehrend einer laufenden HTTP-Aktion geloescht worden sein
+        guard !message.isDeleted, message.modelContext != nil else { return }
+
+        NotificationService.shared.removeNotification(withIdentifier: message.messageId)
+
+        if !message.isRead {
+            message.isRead = true
+            if let topicRef = message.topic {
+                topicRef.unreadCount = max(0, topicRef.unreadCount - 1)
+            }
+            try? modelContext.save()
+            NtfyService.shared.writeWidgetData(context: modelContext)
+        }
+
+        let context = modelContext
+        Task {
+            await TopicActions.updateBadge(context: context)
         }
     }
 
@@ -532,13 +663,30 @@ struct MessageRow: View {
     }
 
     private func copyMessage() {
-        UIPasteboard.general.string = shareText
+        UIPasteboard.general.string = copyText
 
         // Haptic feedback
         if AppSettings.hapticFeedback {
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
         }
+        withAnimation { toastText = "Kopiert!" }
+    }
+
+    /// Text fuer "Kopieren" — wie ntfy Android 1.26: Titel, Nachricht und Zeitstempel
+    private var copyText: String {
+        var parts: [String] = []
+        if let title = message.title, !title.isEmpty {
+            parts.append(title)
+        }
+        if let messageText = message.message, !messageText.isEmpty {
+            parts.append(messageText)
+        }
+        let timestamp = CachedFormatters.mediumDateShortTime.string(from: message.date)
+        if parts.isEmpty {
+            return timestamp
+        }
+        return parts.joined(separator: "\n") + "\n\n" + timestamp
     }
 
     /// Text fuer Teilen (Titel + Nachricht)
