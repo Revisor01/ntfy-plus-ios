@@ -31,6 +31,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # Der CodeQL-Tracer fuer Swift ist x86_64 und braucht Rosetta; das xcode-27-Image
+      # bringt es nicht mit ("Bad CPU type in executable" bei sandbox-exec und swift-plugin-server)
+      - name: Rosetta installieren
+        run: /usr/sbin/softwareupdate --install-rosetta --agree-to-license
+
       # Pakete VOR dem CodeQL-Init aufloesen: der CodeQL-Tracer injiziert sich sonst in
       # SwiftPMs sandbox-exec (Manifest-Laden) und scheitert mit "Bad CPU type in executable"
       - name: Swift-Pakete aufloesen
