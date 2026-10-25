@@ -59,6 +59,8 @@ struct PushPayload {
         if let click = nonEmpty("click") { dict["click"] = click }
         if let icon = nonEmpty("icon") { dict["icon"] = icon }
         if let sequenceId = nonEmpty("sequence_id") { dict["sequence_id"] = sequenceId }
+        // Markdown-Kennzeichen fuer die App (content_type: text/markdown)
+        if let contentType = nonEmpty("content_type") { dict["content_type"] = contentType }
         if let priority = self.priority { dict["priority"] = priority }
 
         if let tagString = nonEmpty("tags") {
@@ -125,5 +127,13 @@ enum PriorityStyle {
         if level > 1 && content.sound == nil {
             content.sound = .default
         }
+    }
+
+    /// In der App stummgeschaltetes Topic: still zustellen (kein Ton, passiv).
+    /// Muss nach `apply(priority:to:)` aufgerufen werden, das den Ton sonst wieder setzt.
+    static func applyMuted(to content: UNMutableNotificationContent) {
+        content.sound = nil
+        content.interruptionLevel = .passive
+        content.relevanceScore = min(content.relevanceScore, 0.1)
     }
 }

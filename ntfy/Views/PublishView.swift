@@ -1,5 +1,17 @@
 import SwiftUI
 import SwiftData
+import PhotosUI
+import UniformTypeIdentifiers
+
+/// Lokal ausgewaehlte Datei (Foto oder Datei aus "Dateien") fuer den Upload per PUT
+private struct LocalAttachment {
+    let data: Data
+    let filename: String
+
+    var formattedSize: String {
+        ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)
+    }
+}
 
 struct PublishView: View {
     @Environment(\.modelContext) private var modelContext
@@ -25,14 +37,30 @@ struct PublishView: View {
     @State private var email = ""
     @State private var useMarkdown = false
 
+    // Zeitversetzte Zustellung per Datumsauswahl
+    @State private var useScheduledDate = false
+    @State private var scheduledDate = Date().addingTimeInterval(3600)
+
+    // Datei-Anhang
+    @State private var localAttachment: LocalAttachment?
+    @State private var photoItem: PhotosPickerItem?
+    @State private var showingFileImporter = false
+    @State private var isLoadingAttachment = false
+    @State private var attachmentError: String?
+
     @State private var showAdvanced = false
     @State private var isLoading = false
     @State private var error: String?
     @State private var showingSuccess = false
+    @State private var successText = "Die Nachricht wurde erfolgreich gesendet."
 
     /// Limits laut ntfy-Server (Header-Groessen)
     private static let maxTitleBytes = 1024
     private static let maxTagsBytes = 512
+
+    /// Standardlimits des ntfy-Servers fuer `delay` (message-delay-limit)
+    private static let minScheduleInterval: TimeInterval = 10
+    private static let maxScheduleInterval: TimeInterval = 3 * 24 * 3600
 
     private var trimmedTitle: String {
         title.trimmed()
@@ -59,6 +87,19 @@ struct PublishView: View {
         parsedTags.joined(separator: ",").utf8.count > Self.maxTagsBytes ? "Die Tags sind zu lang (max. \(Self.maxTagsBytes) Bytes)." : nil
     }
 
+    /// Pruefung des gewaehlten Zeitpunkts (mind. 10 s in der Zukunft, max. 3 Tage)
+    private var scheduleError: String? {
+        guard useScheduledDate else { return nil }
+        let interval = scheduledDate.timeIntervalSinceNow
+        if interval < Self.minScheduleInterval {
+            return "Der Zeitpunkt muss mindestens 10 Sekunden in der Zukunft liegen."
+        }
+        if interval > Self.maxScheduleInterval {
+            return "Der Zeitpunkt darf höchstens 3 Tage in der Zukunft liegen (Standardlimit des ntfy-Servers)."
+        }
+        return nil
+    }
+
     private var hasValidTarget: Bool {
         if useCustomTopic {
             // Bei "Anderes Topic" zaehlt nur der eingegebene Name, nicht die Picker-Auswahl
@@ -68,10 +109,13 @@ struct PublishView: View {
     }
 
     private var isValid: Bool {
-        !message.trimmed().isEmpty &&
+        // Mit Anhang ist die Nachricht optional (ntfy setzt dann einen Standardtext)
+        (!message.trimmed().isEmpty || localAttachment != nil) &&
         hasValidTarget &&
         titleError == nil &&
-        tagsError == nil
+        tagsError == nil &&
+        scheduleError == nil &&
+        !isLoadingAttachment
     }
 
     var body: some View {
@@ -133,6 +177,12 @@ struct PublishView: View {
                     Text("Priorität")
                 }
 
+                // Datei-Anhang
+                attachmentSection
+
+                // Zeitversetzte Zustellung
+                scheduleSection
+
                 // Advanced options
                 Section {
                     DisclosureGroup("Erweiterte Optionen", isExpanded: $showAdvanced) {
@@ -156,10 +206,13 @@ struct PublishView: View {
                         TextField("Anhang-URL", text: $attachURL)
                             .textInputAutocapitalization(.never)
                             .keyboardType(.URL)
+                            .disabled(localAttachment != nil)
 
-                        TextField("Verzögerung (z.B. 30min, 9am)", text: $delay)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
+                        if localAttachment != nil {
+                            Text("Wird ignoriert, solange eine Datei angehängt ist.")
+                                .font(AppFonts.caption)
+                                .foregroundStyle(.secondary)
+                        }
 
                         TextField("E-Mail-Weiterleitung", text: $email)
                             .textInputAutocapitalization(.never)
@@ -205,7 +258,24 @@ struct PublishView: View {
                     dismiss()
                 }
             } message: {
-                Text("Die Nachricht wurde erfolgreich gesendet.")
+                Text(successText)
+            }
+            .fileImporter(
+                isPresented: $showingFileImporter,
+                allowedContentTypes: [.item],
+                allowsMultipleSelection: false
+            ) { result in
+                handleFileImport(result)
+            }
+            .onChange(of: photoItem) { _, newItem in
+                guard let newItem else { return }
+                loadPhoto(newItem)
+            }
+            .onChange(of: useScheduledDate) { _, isOn in
+                // Beim Einschalten einen gueltigen Zeitpunkt vorbelegen
+                if isOn && scheduleError != nil {
+                    scheduledDate = Date().addingTimeInterval(3600)
+                }
             }
             .onAppear {
                 topic = selectedTopic ?? topics.first
@@ -221,8 +291,223 @@ struct PublishView: View {
         }
     }
 
+    // MARK: - Anhang
+
+    @ViewBuilder
+    private var attachmentSection: some View {
+        Section {
+            if let attachment = localAttachment {
+                HStack(spacing: AppSpacing.sm) {
+                    Image(systemName: "paperclip")
+                        .foregroundStyle(AppColors.primary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(attachment.filename)
+                            .lineLimit(1)
+                        Text(attachment.formattedSize)
+                            .font(AppFonts.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        removeAttachment()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Anhang entfernen")
+                }
+            }
+
+            if isLoadingAttachment {
+                HStack(spacing: AppSpacing.sm) {
+                    ProgressView()
+                    Text("Anhang wird geladen …")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            PhotosPicker(
+                selection: $photoItem,
+                matching: .images,
+                preferredItemEncoding: .compatible
+            ) {
+                Label("Foto auswählen", systemImage: "photo.on.rectangle")
+            }
+            .disabled(isLoadingAttachment)
+
+            Button {
+                showingFileImporter = true
+            } label: {
+                Label("Datei auswählen", systemImage: "doc")
+            }
+            .disabled(isLoadingAttachment)
+        } header: {
+            Text("Anhang")
+        } footer: {
+            if let attachmentError {
+                Text(attachmentError)
+                    .foregroundStyle(.red)
+            } else {
+                Text("Optional, max. \(Self.formattedUploadLimit). Der Server kann ein niedrigeres Limit haben; hochgeladene Anhänge laufen nach einiger Zeit ab (ntfy.sh: 3 Stunden).")
+            }
+        }
+    }
+
+    private static var formattedUploadLimit: String {
+        ByteCountFormatter.string(fromByteCount: Int64(NtfyUploadLimits.maxAttachmentBytes), countStyle: .file)
+    }
+
+    private func removeAttachment() {
+        localAttachment = nil
+        photoItem = nil
+        attachmentError = nil
+    }
+
+    /// Uebernimmt die Datei, sofern sie das Upload-Limit nicht ueberschreitet
+    private func setAttachment(data: Data, filename: String) {
+        guard data.count <= NtfyUploadLimits.maxAttachmentBytes else {
+            let size = ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)
+            attachmentError = "Die Datei ist zu groß (\(size), max. \(Self.formattedUploadLimit))."
+            return
+        }
+        localAttachment = LocalAttachment(data: data, filename: filename)
+        attachmentError = nil
+    }
+
+    private func loadPhoto(_ item: PhotosPickerItem) {
+        isLoadingAttachment = true
+        attachmentError = nil
+        let contentType = item.supportedContentTypes.first
+
+        Task {
+            do {
+                let data = try await item.loadTransferable(type: Data.self)
+                await MainActor.run {
+                    if let data {
+                        let prepared = Self.preparePhoto(data: data, contentType: contentType)
+                        setAttachment(data: prepared.data, filename: prepared.filename)
+                    } else {
+                        attachmentError = "Das Foto konnte nicht geladen werden."
+                    }
+                    isLoadingAttachment = false
+                }
+            } catch {
+                let description = error.localizedDescription
+                await MainActor.run {
+                    attachmentError = "Das Foto konnte nicht geladen werden: \(description)"
+                    isLoadingAttachment = false
+                }
+            }
+        }
+    }
+
+    /// Dateiname aus Zeitstempel + Endung; HEIC/HEIF wird zu JPEG umgewandelt,
+    /// da viele Empfaenger (Web-App, aeltere Android-Geraete) HEIC nicht anzeigen.
+    private static func preparePhoto(data: Data, contentType: UTType?) -> (data: Data, filename: String) {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        let baseName = "foto-\(formatter.string(from: Date()))"
+
+        if let contentType,
+           contentType.conforms(to: .heic) || contentType.conforms(to: .heif),
+           let image = UIImage(data: data),
+           let jpeg = image.jpegData(compressionQuality: 0.85) {
+            return (jpeg, "\(baseName).jpg")
+        }
+
+        let fileExtension = contentType?.preferredFilenameExtension ?? "jpg"
+        return (data, "\(baseName).\(fileExtension)")
+    }
+
+    private func handleFileImport(_ result: Result<[URL], Error>) {
+        attachmentError = nil
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            // Dateien ausserhalb der Sandbox: Security-Scoped-Zugriff anfordern
+            let didAccess = url.startAccessingSecurityScopedResource()
+            defer {
+                if didAccess {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            // Groesse vor dem Einlesen pruefen — grosse Dateien nicht in den Speicher laden
+            if let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize,
+               size > NtfyUploadLimits.maxAttachmentBytes {
+                let formatted = ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
+                attachmentError = "Die Datei ist zu groß (\(formatted), max. \(Self.formattedUploadLimit))."
+                return
+            }
+
+            do {
+                let data = try Data(contentsOf: url)
+                setAttachment(data: data, filename: url.lastPathComponent)
+                // Foto-Auswahl zuruecksetzen, damit dasselbe Foto spaeter erneut waehlbar ist
+                photoItem = nil
+            } catch {
+                AppLog.ui.error("❌ Anhang: Datei nicht lesbar: \(error.localizedDescription, privacy: .public)")
+                attachmentError = "Die Datei konnte nicht gelesen werden: \(error.localizedDescription)"
+            }
+
+        case .failure(let error):
+            AppLog.ui.error("❌ Anhang: Dateiauswahl fehlgeschlagen: \(error.localizedDescription, privacy: .public)")
+            attachmentError = "Die Datei konnte nicht ausgewählt werden: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Zeitversetzt senden
+
+    @ViewBuilder
+    private var scheduleSection: some View {
+        Section {
+            Toggle("Zeitpunkt wählen", isOn: $useScheduledDate)
+
+            if useScheduledDate {
+                DatePicker(
+                    "Zeitpunkt",
+                    selection: $scheduledDate,
+                    in: Date()...Date().addingTimeInterval(Self.maxScheduleInterval),
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+            } else {
+                TextField("Verzögerung (z.B. 30min, 9am)", text: $delay)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+            }
+        } header: {
+            Text("Zeitversetzt senden")
+        } footer: {
+            if let scheduleError {
+                Text(scheduleError)
+                    .foregroundStyle(.red)
+            } else {
+                Text("Optional. Frühestens 10 Sekunden, höchstens 3 Tage im Voraus (Standardlimit des ntfy-Servers).")
+            }
+        }
+    }
+
+    /// RFC-3339-Zeitstempel mit lokalem Offset (z.B. 2026-10-25T14:30:00+01:00)
+    private static func rfc3339String(from date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        formatter.timeZone = TimeZone.current
+        return formatter.string(from: date)
+    }
+
+    // MARK: - Senden
+
     private func publish() {
         guard isValid else { return }
+
+        // Zeitpunkt erneut pruefen — seit dem Rendern kann Zeit vergangen sein
+        if let scheduleError {
+            error = scheduleError
+            return
+        }
+
         isLoading = true
         error = nil
 
@@ -247,32 +532,78 @@ struct PublishView: View {
         let publishTags: [String]? = tagList.isEmpty ? nil : tagList
         // Titel vor der Leer-Pruefung trimmen (sonst wird " " als Titel gesendet)
         let publishTitle: String? = trimmedTitle.isEmpty ? nil : trimmedTitle
+        let publishMessage = message.trimmed()
+        let publishClick: String? = clickURL.trimmed().isEmpty ? nil : clickURL.trimmed()
+        let publishIcon: String? = iconURL.trimmed().isEmpty ? nil : iconURL.trimmed()
+        let publishAttach: String? = attachURL.trimmed().isEmpty ? nil : attachURL.trimmed()
+        let publishEmail: String? = email.trimmed().isEmpty ? nil : email.trimmed()
+        let publishMarkdown = useMarkdown
+        let publishPriority = priority
+        let attachment = localAttachment
+
+        // Zeitversetzt: Datumsauswahl als RFC-3339-Zeitstempel, sonst Freitext (30min, 9am …).
+        // Die Geraete-Zeitzone (IANA) erlaubt dem Server, Angaben wie "9am" korrekt aufzuloesen.
+        let publishDelay: String?
+        if useScheduledDate {
+            publishDelay = Self.rfc3339String(from: scheduledDate)
+        } else {
+            let trimmedDelay = delay.trimmed()
+            publishDelay = trimmedDelay.isEmpty ? nil : trimmedDelay
+        }
+        let publishTimezone: String? = publishDelay == nil ? nil : TimeZone.current.identifier
+        let isScheduled = publishDelay != nil
 
         Task {
             do {
-                try await ntfyService.publish(
-                    serverURL: serverURL,
-                    topic: topicName,
-                    message: message.trimmed(),
-                    title: publishTitle,
-                    priority: priority,
-                    tags: publishTags,
-                    click: clickURL.trimmed().isEmpty ? nil : clickURL.trimmed(),
-                    attach: attachURL.trimmed().isEmpty ? nil : attachURL.trimmed(),
-                    icon: iconURL.trimmed().isEmpty ? nil : iconURL.trimmed(),
-                    delay: delay.trimmed().isEmpty ? nil : delay.trimmed(),
-                    email: email.trimmed().isEmpty ? nil : email.trimmed(),
-                    markdown: useMarkdown,
-                    username: credentials?.username,
-                    password: credentials?.password,
-                    token: token
-                )
+                if let attachment {
+                    try await ntfyService.publishAttachment(
+                        serverURL: serverURL,
+                        topic: topicName,
+                        data: attachment.data,
+                        filename: attachment.filename,
+                        message: publishMessage.isEmpty ? nil : publishMessage,
+                        title: publishTitle,
+                        priority: publishPriority,
+                        tags: publishTags,
+                        click: publishClick,
+                        icon: publishIcon,
+                        delay: publishDelay,
+                        timezone: publishTimezone,
+                        email: publishEmail,
+                        markdown: publishMarkdown,
+                        username: credentials?.username,
+                        password: credentials?.password,
+                        token: token
+                    )
+                } else {
+                    try await ntfyService.publish(
+                        serverURL: serverURL,
+                        topic: topicName,
+                        message: publishMessage,
+                        title: publishTitle,
+                        priority: publishPriority,
+                        tags: publishTags,
+                        click: publishClick,
+                        attach: publishAttach,
+                        icon: publishIcon,
+                        delay: publishDelay,
+                        timezone: publishTimezone,
+                        email: publishEmail,
+                        markdown: publishMarkdown,
+                        username: credentials?.username,
+                        password: credentials?.password,
+                        token: token
+                    )
+                }
 
                 await MainActor.run {
                     if AppSettings.hapticFeedback {
                         let generator = UINotificationFeedbackGenerator()
                         generator.notificationOccurred(.success)
                     }
+                    successText = isScheduled
+                        ? "Die Nachricht wurde zur zeitversetzten Zustellung an den Server übergeben."
+                        : "Die Nachricht wurde erfolgreich gesendet."
                     showingSuccess = true
                     isLoading = false
                 }
