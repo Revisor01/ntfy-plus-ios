@@ -21,8 +21,11 @@ on:
 jobs:
   analyze:
     name: Analyze Swift
-    # Swift-Analyse laeuft nur auf macOS-Runnern; iOS-27-SDK nur im Image "xcode-27"
-    runs-on: xcode-27
+    # Swift-Analyse laeuft nur auf macOS-Runnern. Bewusst NICHT auf dem xcode-27-Image:
+    # Dort kann der (x86_64-)CodeQL-Tracer den Macro-Plugin-Server des iOS-27-SDK nicht
+    # starten (u.a. SwiftUI @State ist dort ein Macro). Analysiert wird daher mit Xcode 26
+    # und auf iOS 26 abgesenktem Deployment Target; der Code nutzt keine iOS-27-only-APIs.
+    runs-on: macos-latest
     permissions:
       security-events: write
       contents: read
@@ -31,19 +34,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Der CodeQL-Tracer fuer Swift ist x86_64 und braucht Rosetta; das xcode-27-Image
-      # bringt es nicht mit ("Bad CPU type in executable" bei sandbox-exec und swift-plugin-server)
-      - name: Rosetta installieren
-        run: /usr/sbin/softwareupdate --install-rosetta --agree-to-license
-
       # Pakete VOR dem CodeQL-Init aufloesen: der CodeQL-Tracer injiziert sich sonst in
       # SwiftPMs sandbox-exec (Manifest-Laden) und scheitert mit "Bad CPU type in executable"
       - name: Swift-Pakete aufloesen
         run: |
-          # Manifest-Sandbox aus: der CodeQL-Tracer kann sich nicht in /usr/bin/sandbox-exec
-          # injizieren ("Bad CPU type in executable"), auch nicht beim Build selbst
-          defaults write com.apple.dt.Xcode IDEPackageSupportDisableManifestSandbox -bool YES
-          defaults write com.apple.dt.Xcode IDEPackageSupportDisablePluginExecutionSandbox -bool YES
           xcodebuild -resolvePackageDependencies \
             -project ntfy-ios.xcodeproj \
             -scheme ntfy \
@@ -88,7 +82,7 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
             -disableAutomaticPackageResolution \
-            SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) CODEQL_ANALYSIS' \
+            IPHONEOS_DEPLOYMENT_TARGET=26.0 \
             -skipPackagePluginValidation \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
