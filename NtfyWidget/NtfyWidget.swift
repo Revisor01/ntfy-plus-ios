@@ -264,9 +264,6 @@ struct NtfyWidgetEntryView: View {
 
 // MARK: - Previews
 
-// Im CodeQL-Build ausgeblendet: dessen Tracer kann den Preview-Macro-Plugin-Server
-// nicht starten ("Bad CPU type in executable").
-#if !CODEQL_ANALYSIS
 #Preview(as: .systemSmall) {
     NtfyWidget()
 } timeline: {
@@ -284,4 +281,3 @@ struct NtfyWidgetEntryView: View {
         WidgetMessage(messageId: "3", topic: "plex", title: "Wiedergabe", message: "Breaking Bad S01E01", time: Int(Date().timeIntervalSince1970) - 1800, priority: 3)
     ], unreadCount: 3)
 }
-#endif
