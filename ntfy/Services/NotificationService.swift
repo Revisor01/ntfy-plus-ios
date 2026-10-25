@@ -8,6 +8,9 @@ final class NotificationService: NSObject {
     static let shared = NotificationService()
 
     private let center = UNUserNotificationCenter.current()
+    /// Gesammelte Nachrichten-IDs fuer den gebuendelten Abgleich mit der Mitteilungszentrale
+    private var pendingRemovalIds: Set<String> = []
+    private var removalTask: Task<Void, Never>?
 
     override private init() {
         super.init()
@@ -43,10 +46,7 @@ final class NotificationService: NSObject {
     // MARK: - Badge Management
 
     func getBadgeCount() async -> Int {
-        do {
-            let delivered = await center.deliveredNotifications()
-            return delivered.count
-        }
+        await center.deliveredNotifications().count
     }
 
     /// Geteilter Badge-Zaehler im App-Group-Container. Die NotificationServiceExtension
@@ -84,9 +84,46 @@ final class NotificationService: NSObject {
 
     // MARK: - Notification Management
 
+    /// Entfernt die Mitteilung(en) zu einer Request- oder ntfy-Nachrichten-ID. Push-
+    /// Mitteilungen haben eine von APNs vergebene Request-ID — sie werden ueber
+    /// `userInfo["id"]` gefunden. Aufrufe im selben Durchlauf (z.B. Schleifen) werden
+    /// zu einem einzigen Abgleich mit der Mitteilungszentrale gebuendelt.
     func removeNotification(withIdentifier identifier: String) {
         center.removeDeliveredNotifications(withIdentifiers: [identifier])
         center.removePendingNotificationRequests(withIdentifiers: [identifier])
+
+        pendingRemovalIds.insert(identifier)
+        guard removalTask == nil else { return }
+        removalTask = Task {
+            let ids = self.pendingRemovalIds
+            self.pendingRemovalIds.removeAll()
+            self.removalTask = nil
+            await self.removeDeliveredNotifications(matchingMessageIds: ids)
+        }
+    }
+
+    /// Entfernt zugestellte Mitteilungen, deren Request-ID oder `userInfo["id"]` /
+    /// `userInfo["messageId"]` einer der IDs entspricht. `sequence_id` wird bewusst
+    /// nicht verglichen: sonst verschwaende beim Ersetzen der alten Version auch die
+    /// Mitteilung des Updates (gleiche sequence_id).
+    func removeDeliveredNotifications(matchingMessageIds messageIds: Set<String>) async {
+        guard !messageIds.isEmpty else { return }
+        let delivered = await center.deliveredNotifications()
+        let identifiers = delivered.compactMap { notification -> String? in
+            let request = notification.request
+            if messageIds.contains(request.identifier) {
+                return request.identifier
+            }
+            let userInfo = request.content.userInfo
+            for key in ["id", "messageId"] {
+                if let value = userInfo[key] as? String, messageIds.contains(value) {
+                    return request.identifier
+                }
+            }
+            return nil
+        }
+        guard !identifiers.isEmpty else { return }
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
     }
 
     func removeAllNotifications() {
@@ -150,4 +187,6 @@ extension Notification.Name {
     static let messageReceived = Notification.Name("messageReceived")
     static let apnsTokenReceived = Notification.Name("apnsTokenReceived")
     static let markMessageRead = Notification.Name("markMessageRead")
+    /// Server-URL oder Zugangsdaten eines Servers wurden geaendert — userInfo["serverURL"] = (neue) URL
+    static let serverConfigurationChanged = Notification.Name("serverConfigurationChanged")
 }
