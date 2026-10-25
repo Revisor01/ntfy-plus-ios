@@ -88,6 +88,7 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
             -disableAutomaticPackageResolution \
+            SWIFT_ACTIVE_COMPILATION_CONDITIONS='$(inherited) CODEQL_ANALYSIS' \
             -skipPackagePluginValidation \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
