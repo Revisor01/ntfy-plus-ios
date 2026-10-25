@@ -42,6 +42,7 @@ struct ContentView: View {
             .onAppear {
                 columnVisibility = horizontalSizeClass == .regular ? .all : .detailOnly
                 updateLockWindow()
+                MutedTopicsSync.write(topics: topics)
                 if !hasInitialized {
                     hasInitialized = true
                     Task {
@@ -56,6 +57,10 @@ struct ContentView: View {
                 validateSelectedTopic()
                 // Reagiert auch auf geaenderte Server-URL (Server-Editor zieht Topics um)
                 syncSubscriptions()
+            }
+            .onChange(of: muteSyncKeys) {
+                // Stummschaltung fuer die NotificationServiceExtension spiegeln
+                MutedTopicsSync.write(topics: topics)
             }
             .onChange(of: isLocked) {
                 updateLockWindow()
@@ -235,6 +240,12 @@ struct ContentView: View {
         Set(topics.filter { !$0.isDeleted && $0.modelContext != nil }.map { "\($0.id)|\($0.serverURL)|\($0.name)" })
     }
 
+    /// "serverURL|name|isMuted" aller Topics — Ausloeser fuer den Abgleich der
+    /// Stummschaltung mit der NotificationServiceExtension.
+    private var muteSyncKeys: Set<String> {
+        Set(topics.filter { !$0.isDeleted && $0.modelContext != nil }.map { "\($0.serverURL)|\($0.name)|\($0.isMuted)" })
+    }
+
     /// Setzt `selectedTopic` zurueck, wenn das Topic geloescht wurde, bevor die
     /// Detailspalte ein ungueltiges Model rendert.
     private func validateSelectedTopic() {
@@ -359,6 +370,39 @@ struct ContentView: View {
 private struct SubscribedTopic: Hashable {
     let serverURL: String
     let name: String
+}
+
+// MARK: - Stummgeschaltete Topics (App Group)
+
+/// Schreibt die stummgeschalteten Topics in die App-Group-UserDefaults, damit die
+/// NotificationServiceExtension Push-Mitteilungen dieser Topics still zustellt.
+/// Format (siehe SharedStore in der NSE):
+/// - `mutedTopicKeys`: ["<serverURL>|<name>"] aller stummen Topics
+/// - `mutedTopicNames`: Namen, bei denen ALLE gleichnamigen Topics stumm sind
+///   (fuer Pushes, deren Server die NSE nicht eindeutig kennt)
+@MainActor
+private enum MutedTopicsSync {
+    static let appGroup = "group.de.godsapp.ntfy"
+    static let keysKey = "mutedTopicKeys"
+    static let namesKey = "mutedTopicNames"
+
+    static func write(topics: [Topic]) {
+        guard let defaults = UserDefaults(suiteName: appGroup) else { return }
+        let liveTopics = topics.filter { !$0.isDeleted && $0.modelContext != nil }
+
+        var mutedKeys: Set<String> = []
+        var allMutedByName: [String: Bool] = [:]
+        for topic in liveTopics {
+            if topic.isMuted {
+                mutedKeys.insert("\(topic.serverURL)|\(topic.name)")
+            }
+            allMutedByName[topic.name] = (allMutedByName[topic.name] ?? true) && topic.isMuted
+        }
+        let mutedNames = allMutedByName.filter { $0.value }.map { $0.key }
+
+        defaults.set(mutedKeys.sorted(), forKey: keysKey)
+        defaults.set(mutedNames.sorted(), forKey: namesKey)
+    }
 }
 
 // MARK: - App-Sperre (eigenes Fenster)

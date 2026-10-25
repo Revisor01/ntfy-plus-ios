@@ -62,6 +62,13 @@ class NotificationService: UNNotificationServiceExtension {
         content.badge = NSNumber(value: newBadge)
 
         let servers = topic.isEmpty ? [] : SharedStore.servers(for: topic)
+        // Eindeutiger Server nur, wenn das Topic genau auf einem Server abonniert ist
+        let knownServerURL = servers.count == 1 ? servers.first : nil
+
+        // In der App stummgeschaltet: still zustellen (Badge zaehlt trotzdem hoch)
+        if SharedStore.isMuted(topic: topic, serverURL: knownServerURL) {
+            PriorityStyle.applyMuted(to: content)
+        }
 
         if payload.event == "poll_request" {
             // Englischen Server-Platzhalter ("New message") eindeutschen, falls der Abruf scheitert
@@ -90,8 +97,12 @@ class NotificationService: UNNotificationServiceExtension {
                 }
                 // Auch wenn die Zeit bereits abgelaufen ist: App bekommt die Nachricht trotzdem
                 SharedStore.writePendingMessage(result.message, serverURL: result.serverURL)
+                let isMuted = SharedStore.isMuted(topic: topic, serverURL: result.serverURL)
                 self.deliver { content in
                     NotificationService.applyResolvedMessage(result.message, serverURL: result.serverURL, topic: topic, to: content)
+                    if isMuted {
+                        PriorityStyle.applyMuted(to: content)
+                    }
                 }
                 logger.info("🔔 poll_request aufgeloest, badge: \(newBadge, privacy: .public)")
             }
@@ -99,7 +110,7 @@ class NotificationService: UNNotificationServiceExtension {
         }
 
         // Normaler "message"-Push: Inhalt ist bereits im Payload
-        let serverURL = servers.count == 1 ? servers.first : nil
+        let serverURL = knownServerURL
         if let message = payload.messageDictionary() {
             SharedStore.writePendingMessage(message, serverURL: serverURL)
         }

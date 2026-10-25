@@ -126,4 +126,12 @@ enum PriorityStyle {
             content.sound = .default
         }
     }
+
+    /// In der App stummgeschaltetes Topic: still zustellen (kein Ton, passiv).
+    /// Muss nach `apply(priority:to:)` aufgerufen werden, das den Ton sonst wieder setzt.
+    static func applyMuted(to content: UNMutableNotificationContent) {
+        content.sound = nil
+        content.interruptionLevel = .passive
+        content.relevanceScore = min(content.relevanceScore, 0.1)
+    }
 }
