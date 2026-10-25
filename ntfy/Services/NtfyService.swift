@@ -14,6 +14,8 @@ enum NtfyError: LocalizedError {
     case decodingError(Error)
     case badRequest(String?)
     case rateLimited
+    /// Anhang groesser als das clientseitige Limit (Bytes)
+    case attachmentTooLarge(Int)
     case unknown
 
     var errorDescription: String? {
@@ -39,6 +41,9 @@ enum NtfyError: LocalizedError {
             return "Ungültige Anfrage"
         case .rateLimited:
             return "Zu viele Anfragen – bitte später erneut versuchen"
+        case .attachmentTooLarge(let limit):
+            let formatted = ByteCountFormatter.string(fromByteCount: Int64(limit), countStyle: .file)
+            return "Der Anhang ist zu groß (max. \(formatted); der Server kann ein niedrigeres Limit haben)"
         case .unknown:
             return "Unbekannter Fehler"
         }
@@ -94,6 +99,12 @@ private enum NtfyHTTP {
         set.remove(charactersIn: "/;")
         return set
     }()
+
+    /// Erlaubte Zeichen fuer Query-Werte: nur RFC-3986-"unreserved" (ASCII). Alles andere
+    /// (inkl. "+", "&", "=", ",", Umlaute) wird prozentkodiert.
+    static let queryValueAllowed = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+    )
 
     static func encodePathSegment(_ segment: String) -> String? {
         // "." und ".." wuerden als Dot-Segmente den Pfad verlassen
@@ -159,9 +170,18 @@ private struct PublishPayload: Encodable {
     let attach: String?
     let icon: String?
     let delay: String?
+    /// IANA-Zeitzone fuer `delay` (z.B. "Europe/Berlin")
+    let timezone: String?
     let email: String?
     let markdown: Bool?
     let actions: [NtfyAction]?
+}
+
+/// Limits fuer Datei-Uploads (PUT mit Datei als Body)
+enum NtfyUploadLimits {
+    /// Clientseitige Obergrenze; ntfy.sh erlaubt 15 MB, selbst gehostete Server
+    /// koennen per `attachment-file-size-limit` ein anderes Limit setzen.
+    static let maxAttachmentBytes = 15 * 1024 * 1024
 }
 
 // MARK: - Redirect-Schutz
@@ -379,6 +399,14 @@ final class NtfyService {
                 throw NtfyError.serverError(httpResponse.statusCode)
             }
 
+            // Server kappt Replays (10 MB pro Topic) und liefert dann nur die NEUESTEN
+            // Nachrichten — aeltere sind verloren. Ein Folge-Request mit since=<letzte ID>
+            // braechte sie nicht zurueck (er liefert nur Neueres), daher nur protokollieren.
+            if let truncated = httpResponse.value(forHTTPHeaderField: "X-Messages-Truncated"),
+               truncated == "1" || truncated.lowercased() == "true" {
+                AppLog.network.warning("⚠️ Poll gekuerzt (X-Messages-Truncated) fuer \(topic, privacy: .private) — aeltere Nachrichten wurden vom Server weggelassen")
+            }
+
             // Parse newline-delimited JSON
             let lines = String(data: data, encoding: .utf8)?.split(separator: "\n") ?? []
             let decoder = JSONDecoder()
@@ -417,6 +445,7 @@ final class NtfyService {
         attach: String? = nil,
         icon: String? = nil,
         delay: String? = nil,
+        timezone: String? = nil,
         email: String? = nil,
         markdown: Bool = false,
         actions: [NtfyAction]? = nil,
@@ -439,6 +468,8 @@ final class NtfyService {
             attach: attach,
             icon: icon,
             delay: (delay?.isEmpty ?? true) ? nil : delay,
+            // Zeitzone nur zusammen mit einer Verzoegerung senden (sonst bedeutungslos)
+            timezone: (delay?.isEmpty ?? true) || (timezone?.isEmpty ?? true) ? nil : timezone,
             email: (email?.isEmpty ?? true) ? nil : email,
             markdown: markdown ? true : nil,
             actions: (actions?.isEmpty ?? true) ? nil : actions
@@ -474,6 +505,136 @@ final class NtfyService {
             throw NtfyError.unauthorized
         case 403:
             throw NtfyError.forbidden
+        case 429:
+            throw NtfyError.rateLimited
+        default:
+            throw NtfyError.serverError(httpResponse.statusCode)
+        }
+    }
+
+    // MARK: - Publish Attachment (Datei-Upload)
+
+    /// Laedt eine Datei als Anhang hoch (`PUT <serverURL>/<topic>`, Body = Dateiinhalt,
+    /// docs.ntfy.sh/publish/#attach-local-file). Alle weiteren Felder laufen als
+    /// Query-Parameter — anders als HTTP-Header sind sie per Prozent-Kodierung
+    /// UTF-8-sicher (Umlaute/Emoji in Titel und Nachricht).
+    func publishAttachment(
+        serverURL: String,
+        topic: String,
+        data: Data,
+        filename: String,
+        message: String? = nil,
+        title: String? = nil,
+        priority: Priority = .default,
+        tags: [String]? = nil,
+        click: String? = nil,
+        icon: String? = nil,
+        delay: String? = nil,
+        timezone: String? = nil,
+        email: String? = nil,
+        markdown: Bool = false,
+        username: String? = nil,
+        password: String? = nil,
+        token: String? = nil
+    ) async throws {
+        guard data.count <= NtfyUploadLimits.maxAttachmentBytes else {
+            throw NtfyError.attachmentTooLarge(NtfyUploadLimits.maxAttachmentBytes)
+        }
+
+        var parameters: [(String, String)] = []
+        let trimmedFilename = filename.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedFilename.isEmpty {
+            parameters.append(("filename", trimmedFilename))
+        }
+        if let message, !message.isEmpty {
+            parameters.append(("message", message))
+        }
+        if let title, !title.isEmpty {
+            parameters.append(("title", title))
+        }
+        if priority != .default {
+            parameters.append(("priority", String(priority.rawValue)))
+        }
+        let cleanedTags = tags?.filter { !$0.isEmpty } ?? []
+        if !cleanedTags.isEmpty {
+            parameters.append(("tags", cleanedTags.joined(separator: ",")))
+        }
+        if let click, !click.isEmpty {
+            parameters.append(("click", click))
+        }
+        if let icon, !icon.isEmpty {
+            parameters.append(("icon", icon))
+        }
+        if let delay, !delay.isEmpty {
+            parameters.append(("delay", delay))
+            if let timezone, !timezone.isEmpty {
+                parameters.append(("timezone", timezone))
+            }
+        }
+        if let email, !email.isEmpty {
+            parameters.append(("email", email))
+        }
+        if markdown {
+            parameters.append(("markdown", "yes"))
+        }
+
+        guard let baseURL = NtfyHTTP.url(serverURL: serverURL, pathSegments: [topic]),
+              var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw NtfyError.invalidURL
+        }
+        // Strikte Kodierung: URLComponents.queryItems laesst "+", "&"-nahe Zeichen u.a.
+        // stehen — der Go-Server wuerde "+" als Leerzeichen lesen.
+        var encodedPairs: [String] = []
+        for (name, value) in parameters {
+            guard let encodedValue = value.addingPercentEncoding(withAllowedCharacters: NtfyHTTP.queryValueAllowed) else {
+                throw NtfyError.invalidURL
+            }
+            encodedPairs.append("\(name)=\(encodedValue)")
+        }
+        components.percentEncodedQuery = encodedPairs.isEmpty ? nil : encodedPairs.joined(separator: "&")
+        guard let url = components.url else {
+            throw NtfyError.invalidURL
+        }
+
+        var request = createRequest(
+            url: url,
+            method: "PUT",
+            auth: authHeader(username: username, password: password, token: token)
+        )
+        request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        // Upload darf laenger dauern als ein normaler Request
+        request.timeoutInterval = 120
+
+        AppLog.network.info("📎 Upload: \(data.count, privacy: .public) Bytes an \(topic, privacy: .private)")
+
+        let result: (Data, URLResponse)
+        do {
+            result = try await session.upload(for: request, from: data)
+        } catch {
+            throw NtfyError.networkError(error)
+        }
+        let (responseData, response) = result
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw NtfyError.unknown
+        }
+
+        switch httpResponse.statusCode {
+        case 200..<300:
+            return
+        case 400:
+            let detail = NtfyHTTP.serverErrorMessage(from: responseData)
+            AppLog.network.error("📎 Upload abgelehnt (400): \(detail ?? "-", privacy: .private)")
+            throw NtfyError.badRequest(detail)
+        case 401:
+            throw NtfyError.unauthorized
+        case 403:
+            throw NtfyError.forbidden
+        case 413:
+            // Server-Limit (attachment-file-size-limit bzw. Kontingent) ueberschritten
+            let detail = NtfyHTTP.serverErrorMessage(from: responseData)
+            AppLog.network.error("📎 Upload zu gross (413): \(detail ?? "-", privacy: .private)")
+            throw NtfyError.badRequest(detail ?? "Der Anhang überschreitet das Limit des Servers.")
         case 429:
             throw NtfyError.rateLimited
         default:
@@ -965,6 +1126,7 @@ final class NtfyService {
             existing.priority = message.priority ?? 3
             existing.clickURL = message.click
             existing.iconURL = message.icon
+            existing.isMarkdown = message.isMarkdown
             if let attachment = message.attachment {
                 existing.attachmentData = try? JSONEncoder().encode(StoredAttachment(from: attachment))
             }
@@ -1003,6 +1165,7 @@ final class NtfyService {
             target.priority = message.priority ?? 3
             target.clickURL = message.click
             target.iconURL = message.icon
+            target.isMarkdown = message.isMarkdown
             target.attachmentData = message.attachment.flatMap { try? JSONEncoder().encode(StoredAttachment(from: $0)) }
             if let actions = message.actions, !actions.isEmpty {
                 target.actionsData = try? JSONEncoder().encode(actions.map { StoredAction(from: $0) })
