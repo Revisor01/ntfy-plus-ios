@@ -1,5 +1,8 @@
 name: CodeQL
 
+# Hinweis: Datei heisst codeql-analysis.yml, weil der alte Workflow (codeql.yml)
+# von GitHub wegen Inaktivitaet deaktiviert wurde; ein neuer Pfad ist wieder aktiv.
+#
 # Eigener Workflow statt Default-Setup: dessen Autobuild scheitert an nanopb
 # (transitive Firebase-Abhängigkeit). Das Paket enthält eine Datei namens "build",
 # wo Xcode ein Verzeichnis anlegen will — "File exists but is not a directory".
@@ -18,7 +21,10 @@ on:
 jobs:
   analyze:
     name: Analyze Swift
-    # Swift-Analyse laeuft nur auf macOS-Runnern
+    # Swift-Analyse laeuft nur auf macOS-Runnern. Bewusst NICHT auf dem xcode-27-Image:
+    # Dort kann der (x86_64-)CodeQL-Tracer den Macro-Plugin-Server des iOS-27-SDK nicht
+    # starten (u.a. SwiftUI @State ist dort ein Macro). Analysiert wird daher mit Xcode 26
+    # und auf iOS 26 abgesenktem Deployment Target; der Code nutzt keine iOS-27-only-APIs.
     runs-on: macos-latest
     permissions:
       security-events: write
@@ -27,6 +33,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      # Pakete VOR dem CodeQL-Init aufloesen: der CodeQL-Tracer injiziert sich sonst in
+      # SwiftPMs sandbox-exec (Manifest-Laden) und scheitert mit "Bad CPU type in executable"
+      - name: Swift-Pakete aufloesen
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project ntfy-ios.xcodeproj \
+            -scheme ntfy \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages"
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -66,10 +81,13 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
+            -disableAutomaticPackageResolution \
+            IPHONEOS_DEPLOYMENT_TARGET=26.0 \
+            -skipPackagePluginValidation \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY="" \
-            | xcpretty || exit ${PIPESTATUS[0]}
+            -quiet
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4

@@ -7,6 +7,47 @@ und dieses Projekt folgt [Semantic Versioning 2.0.0](https://semver.org/lang/de/
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-25
+
+iOS 27 als Mindestversion, neue Sende- und Push-Funktionen. Build 8.
+
+### Added
+
+- **Anhänge senden**: Fotos (PhotosPicker) und Dateien bis 15 MB direkt aus der App
+  hochladen (`PUT /<topic>`, Nachricht/Titel/Priorität/Tags als Parameter)
+- **Zustellzeitpunkt per Datumsauswahl** beim Senden (RFC 3339 + Zeitzone, max. 3 Tage)
+- **Bild-Anhänge als Vorschau in Push-Mitteilungen** (bis 10 MB, auch bei geschützten Topics)
+- Stummgeschaltete Topics werden auch per Push lautlos zugestellt
+- Actions mit `clear=true` markieren die Nachricht als gelesen und entfernen die Mitteilung
+- HTTP-Actions: Bestätigungsdialog mit Methode, Ziel, Header-Namen und Body-Vorschau;
+  anschließend Erfolgs- oder Fehlermeldung
+- Tap auf eine Mitteilung beim Kaltstart öffnet das Topic (nach dem Entsperren)
+- CodeQL-Analyse läuft wieder (neuer Workflow-Pfad), Dependabot auch für Swift-Pakete
+
+### Changed
+
+- **Mindestversion iOS 27.0** für App, Notification Service Extension und Widget
+  (vorher iOS 26 bzw. 17); alle Targets in Swift 6; Build mit Xcode 27
+- Markdown wird nur noch bei als Markdown gesendeten Nachrichten formatiert
+  (`content_type`, wie upstream ntfy); bereits gespeicherte Nachrichten bleiben formatiert
+- Geschützte Anhänge und Icons des eigenen Servers werden mit Anmeldung geladen;
+  Größenlimits für Icons (2 MB) und Anhänge (15 MB); keine Zugangsdaten an fremde Hosts
+- Widget zeigt die tatsächliche Zahl ungelesener Nachrichten statt höchstens 10
+- Mitteilungs-Schalter in den Einstellungen zeigt den echten iOS-Berechtigungsstatus
+- Kopieren übernimmt Titel, Nachricht und Zeitstempel
+- iPad: App-Sperre und Sichtschutz gelten für alle Fenster; Entsperren gilt app-weit
+- `Package.resolved` ist eingecheckt (reproduzierbare Builds)
+
+### Fixed
+
+- Abgelaufene Anhänge werden als „Anhang abgelaufen" angezeigt statt fehlzuschlagen
+- Gekürzte Poll-Antworten des Servers (`X-Messages-Truncated`) werden protokolliert
+
+### Hinweise für den Build
+
+- Xcode 27 erforderlich (Deployment Target iOS 27.0)
+- Weiterhin: Keychain Sharing (`de.godsapp.ntfy`) im NSE-Target prüfen
+
 ## [2.1.0] - 2026-10-25
 
 Abgleich mit ntfy-Server v2.28–v2.34 und der offiziellen iOS-App 1.8.0, plus Behebung
@@ -172,7 +213,8 @@ Erste Version.
 - Anzeige von App-Icons aus Nachrichten, Prioritäts-Badges, Dark Mode
 - Notification Service Extension für Badge-Zählung und Aufbereitung eingehender Pushes
 
-[Unreleased]: https://github.com/Revisor01/ntfy-plus-ios/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/Revisor01/ntfy-plus-ios/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/Revisor01/ntfy-plus-ios/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/Revisor01/ntfy-plus-ios/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/Revisor01/ntfy-plus-ios/compare/v1.0...v2.0.0
 [1.0.0]: https://github.com/Revisor01/ntfy-plus-ios/releases/tag/v1.0
