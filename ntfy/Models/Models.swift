@@ -18,10 +18,18 @@ struct NtfyMessage: Codable, Identifiable, Hashable {
     let attachment: NtfyAttachment?
     let icon: String?
     let sequenceId: String?
+    /// "text/markdown" bei Markdown-Nachrichten (X-Markdown/JSON markdown=true), sonst nil
+    let contentType: String?
 
     enum CodingKeys: String, CodingKey {
         case id, time, expires, event, topic, message, title, tags, priority, click, actions, attachment, icon
         case sequenceId = "sequence_id"
+        case contentType = "content_type"
+    }
+
+    /// true, wenn der Server die Nachricht als Markdown markiert hat (wie upstream ntfy)
+    var isMarkdown: Bool {
+        contentType?.lowercased().hasPrefix("text/markdown") == true
     }
 
     var date: Date {
@@ -248,6 +256,12 @@ struct StoredAttachment: Codable, Hashable {
     var fileName: String {
         name ?? "attachment"
     }
+
+    /// Ablaufzeitpunkt laut ntfy (`attachment.expires`, nur bei auf den Server hochgeladenen Dateien)
+    var expiryDate: Date? {
+        guard let expires, expires > 0 else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(expires))
+    }
 }
 
 @Model
@@ -265,6 +279,9 @@ final class StoredMessage {
     var isRead: Bool
     var isStarred: Bool = false
     var receivedAt: Date
+    /// Markdown-Kennzeichen vom Server (`content_type: text/markdown`).
+    /// nil = vor diesem Feld gespeichert (wird weiterhin als Markdown dargestellt).
+    var isMarkdown: Bool? = nil
 
     // New: Attachment and Actions
     var attachmentData: Data?
@@ -285,6 +302,7 @@ final class StoredMessage {
         self.iconURL = ntfyMessage.icon
         self.isRead = false
         self.receivedAt = Date()
+        self.isMarkdown = ntfyMessage.isMarkdown
         self.topic = topic
 
         // Encode attachment
