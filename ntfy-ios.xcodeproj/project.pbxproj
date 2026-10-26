@@ -54,6 +54,13 @@
 			remoteGlobalIDString = A9000001233300001;
 			remoteInfo = NtfyWidget;
 		};
+		B10000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000001233399900 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1000001233399999;
+			remoteInfo = ntfy;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -106,6 +113,7 @@
 		A9000001233300007 /* NtfyWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NtfyWidgetBundle.swift; sourceTree = "<group>"; };
 		A9000001233300008 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A9000001233300009 /* NtfyWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = NtfyWidget.entitlements; sourceTree = "<group>"; };
+		B10000000000000000000002 /* ntfyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ntfyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -120,6 +128,7 @@
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		F8D1E11A2F0FFCDB0028E66C /* NotificationServiceExtension */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (F8D1E1242F0FFCDB0028E66C /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = NotificationServiceExtension; sourceTree = "<group>"; };
+		B10000000000000000000003 /* ntfyTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = ntfyTests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -145,6 +154,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B10000000000000000000004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -154,6 +170,7 @@
 				A1000001233399993 /* ntfy */,
 				F8D1E11A2F0FFCDB0028E66C /* NotificationServiceExtension */,
 				A9000001233300003 /* NtfyWidget */,
+				B10000000000000000000003 /* ntfyTests */,
 				F8F170AC2F0FAFE800F0234B /* Frameworks */,
 				A1000001233399992 /* Products */,
 			);
@@ -165,6 +182,7 @@
 				A1000001233300000 /* ntfy.app */,
 				F8D1E1192F0FFCDA0028E66C /* NotificationServiceExtension.appex */,
 				A9000001233300002 /* NtfyWidget.appex */,
+				B10000000000000000000002 /* ntfyTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -307,6 +325,28 @@
 			productReference = A9000001233300002 /* NtfyWidget.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		B10000000000000000000005 /* ntfyTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B10000000000000000000006 /* Build configuration list for PBXNativeTarget "ntfyTests" */;
+			buildPhases = (
+				B10000000000000000000007 /* Sources */,
+				B10000000000000000000004 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B10000000000000000000008 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B10000000000000000000003 /* ntfyTests */,
+			);
+			name = ntfyTests;
+			packageProductDependencies = (
+			);
+			productName = ntfyTests;
+			productReference = B10000000000000000000002 /* ntfyTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -325,6 +365,10 @@
 					};
 					A9000001233300001 = {
 						CreatedOnToolsVersion = 16.0;
+					};
+					B10000000000000000000005 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = A1000001233399999;
 					};
 				};
 			};
@@ -348,6 +392,7 @@
 				A1000001233399999 /* ntfy */,
 				F8D1E1182F0FFCDA0028E66C /* NotificationServiceExtension */,
 				A9000001233300001 /* NtfyWidget */,
+				B10000000000000000000005 /* ntfyTests */,
 			);
 		};
 /* End PBXProject section */
@@ -425,6 +470,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B10000000000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -437,6 +489,11 @@
 			isa = PBXTargetDependency;
 			target = A9000001233300001 /* NtfyWidget */;
 			targetProxy = A9000001233300017 /* PBXContainerItemProxy */;
+		};
+		B10000000000000000000008 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1000001233399999 /* ntfy */;
+			targetProxy = B10000000000000000000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -744,6 +801,40 @@
 			};
 			name = Release;
 		};
+		B10000000000000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = J459G9CJT5;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = de.godsapp.ntfy.ntfyTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ntfy.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ntfy";
+			};
+			name = Debug;
+		};
+		B1000000000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = J459G9CJT5;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = de.godsapp.ntfy.ntfyTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ntfy.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ntfy";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -779,6 +870,15 @@
 			buildConfigurations = (
 				A9000001233300013 /* Debug */,
 				A9000001233300014 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B10000000000000000000006 /* Build configuration list for PBXNativeTarget "ntfyTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B10000000000000000000009 /* Debug */,
+				B1000000000000000000000A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

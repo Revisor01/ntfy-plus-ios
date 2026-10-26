@@ -1,7 +1,8 @@
 name: Build
 
-# Schneller Compile-Check für jeden PR (ohne CodeQL-Analyse).
+# Baut die App für jeden PR und führt die Unit-Tests auf einem Simulator aus.
 # GoogleService-Info.plist ist nicht im Repo; für den Build reicht ein Platzhalter.
+# Der Job-Name bleibt, weil der Branch-Schutz den Check unter diesem Namen verlangt.
 
 on:
   push:
@@ -24,18 +25,21 @@ jobs:
     with:
       projekt: ntfy-ios.xcodeproj
       schema: ntfy
-      aktion: build
+      aktion: test
+      test-ziel: ntfyTests
       # iOS-27-SDK: Xcode 27 gibt es auf GitHub derzeit nur im Image "xcode-27"
       runner: xcode-27
       xcode: vorgabe
       ohne-signierung: true
+      # Firebase prüft die Form des API-Keys beim Start (39 Zeichen, beginnt mit A);
+      # sonst stürzt die App als Test-Host ab.
       vorbereitung: |
         cat > ntfy/GoogleService-Info.plist <<'PLIST'
         <?xml version="1.0" encoding="UTF-8"?>
         <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
         <plist version="1.0">
         <dict>
-          <key>API_KEY</key><string>ci-placeholder</string>
+          <key>API_KEY</key><string>Aci-placeholder000000000000000000000000</string>
           <key>GCM_SENDER_ID</key><string>000000000000</string>
           <key>BUNDLE_ID</key><string>de.godsapp.ntfy</string>
           <key>PROJECT_ID</key><string>ci-placeholder</string>
