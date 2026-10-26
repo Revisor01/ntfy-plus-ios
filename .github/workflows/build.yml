@@ -1,7 +1,8 @@
 name: Build
 
-# Schneller Compile-Check für jeden PR (ohne CodeQL-Analyse).
+# Baut die App für jeden PR und führt die Unit-Tests auf einem Simulator aus.
 # GoogleService-Info.plist ist nicht im Repo; für den Build reicht ein Platzhalter.
+# Der Job-Name bleibt, weil der Branch-Schutz den Check unter diesem Namen verlangt.
 
 on:
   push:
@@ -24,7 +25,8 @@ jobs:
     with:
       projekt: ntfy-ios.xcodeproj
       schema: ntfy
-      aktion: build
+      aktion: test
+      test-ziel: ntfyTests
       # iOS-27-SDK: Xcode 27 gibt es auf GitHub derzeit nur im Image "xcode-27"
       runner: xcode-27
       xcode: vorgabe
