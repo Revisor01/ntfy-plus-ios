@@ -10,6 +10,10 @@
 </p>
 
 <p align="center">
+  <b>Deutsch</b> · <a href="README.en.md">English</a>
+</p>
+
+<p align="center">
   <img src="https://img.shields.io/badge/Platform-iOS%2027+-blue?logo=apple" alt="Platform">
   <img src="https://img.shields.io/badge/Swift-6.0-orange?logo=swift" alt="Swift">
   <img src="https://img.shields.io/badge/Xcode-27+-blue?logo=xcode" alt="Xcode">
@@ -100,8 +104,8 @@ Fehlermeldungen und Vorschläge sind willkommen — gern als
 [Issue](https://github.com/Revisor01/ntfy-plus-ios/issues); die Vorlage fragt
 nach App- und Server-Version. Sicherheitslücken bitte vertraulich melden, wie in
 [SECURITY.md](SECURITY.md) beschrieben. Pull Requests laufen durch einen Build
-und einen Secret-Scan; die Grundsätze für Beiträge stehen in
-[CLAUDE.md](CLAUDE.md).
+und einen Secret-Scan; siehe
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Datenschutz
 
@@ -119,8 +123,7 @@ der ntfy-Server stellt Push-Nachrichten über diesen Weg zu.
 ntfy+ steht unter der
 [GNU Affero General Public License v3.0](LICENSE). Wer ntfy+ verändert und
 anderen zur Verfügung stellt, auch als Webdienst, legt seinen Quelltext unter
-derselben Lizenz offen. Wer das nicht möchte, bekommt auf Anfrage eine
-kommerzielle Lizenz ([mail@simonluthe.de](mailto:mail@simonluthe.de)). Für
+derselben Lizenz offen. Für
 Beiträge gilt [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Die Fassungen im App Store verteilt der Urheber als Rechteinhaber selbst.

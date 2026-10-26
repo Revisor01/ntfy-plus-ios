@@ -8,7 +8,11 @@ und dieses Projekt folgt [Semantic Versioning 2.0.0](https://semver.org/lang/de/
 ## [Unreleased]
 
 ### Geändert
-- Neue Lizenz: GNU AGPL v3.0 statt GPL-3.0: Die Pflicht, Änderungen offenzulegen, gilt jetzt auch für den Betrieb als Webdienst. Eine kommerzielle Lizenz gibt es auf Anfrage.
+- Neue Lizenz: GNU AGPL v3.0 statt GPL-3.0: Die Pflicht, Änderungen offenzulegen, gilt jetzt auch für den Betrieb als Webdienst.
+
+### Sonstiges
+
+- README, Vorlagen für Issues und Pull Requests sowie die Hinweise zu Sicherheit und Mitmachen gibt es jetzt auch auf Englisch.
 
 ## [2.2.0] - 2026-10-25
 
