@@ -1,7 +1,7 @@
 name: Build
 
-# Schneller Compile-Check fuer jeden PR (ohne CodeQL-Analyse).
-# GoogleService-Info.plist ist nicht im Repo; fuer den Build reicht ein Platzhalter.
+# Schneller Compile-Check für jeden PR (ohne CodeQL-Analyse).
+# GoogleService-Info.plist ist nicht im Repo; für den Build reicht ein Platzhalter.
 
 on:
   push:
@@ -10,6 +10,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
@@ -17,74 +20,34 @@ concurrency:
 jobs:
   build:
     name: Build (iOS Simulator)
-    # iOS-27-SDK: Xcode 27 gibt es auf GitHub derzeit nur im Image "xcode-27"
-    runs-on: xcode-27
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Xcode-Version
-        run: xcodebuild -version
-
-      - name: Platzhalter fuer GoogleService-Info.plist
-        run: |
-          cat > ntfy/GoogleService-Info.plist <<'PLIST'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>API_KEY</key><string>ci-placeholder</string>
-            <key>GCM_SENDER_ID</key><string>000000000000</string>
-            <key>BUNDLE_ID</key><string>de.godsapp.ntfy</string>
-            <key>PROJECT_ID</key><string>ci-placeholder</string>
-            <key>GOOGLE_APP_ID</key><string>1:000000000000:ios:0000000000000000</string>
-            <key>IS_ADS_ENABLED</key><false/>
-            <key>IS_ANALYTICS_ENABLED</key><false/>
-            <key>IS_APPINVITE_ENABLED</key><false/>
-            <key>IS_GCM_ENABLED</key><true/>
-            <key>IS_SIGNIN_ENABLED</key><false/>
-          </dict>
-          </plist>
-          PLIST
-
-      - name: Build
-        run: |
-          set -o pipefail
-          xcodebuild build \
-            -project ntfy-ios.xcodeproj \
-            -scheme ntfy \
-            -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
-            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGN_IDENTITY="" \
-            2>&1 | tee "$RUNNER_TEMP/build.log" | grep -E "error:|warning: .*(Sendable|actor|isolat)|BUILD (SUCCEEDED|FAILED)" || true
-          if ! grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/build.log"; then
-            echo "::group::Fehlerkontext"
-            grep -n -B3 -A8 -E "error|failed|Command .* failed" "$RUNNER_TEMP/build.log" | tail -n 250
-            echo "::endgroup::"
-            exit 1
-          fi
-
-      # Aufgeloeste Paketversionen als Artefakt, damit Package.resolved
-      # (fuer Dependabot/reproduzierbare Builds) ohne lokalen Mac aktualisiert werden kann
-      - name: Build-Log bereitstellen
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: build-log
-          path: ${{ runner.temp }}/build.log
-
-      - name: Package.resolved bereitstellen
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: Package.resolved
-          path: ntfy-ios.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
-          if-no-files-found: warn
+    uses: Revisor01/workflows/.github/workflows/xcode-tests.yml@9eb921a3c730493b1aea79d5b22bf655356d5e43 # 1.2.0
+    with:
+      projekt: ntfy-ios.xcodeproj
+      schema: ntfy
+      aktion: build
+      # iOS-27-SDK: Xcode 27 gibt es auf GitHub derzeit nur im Image "xcode-27"
+      runner: xcode-27
+      xcode: vorgabe
+      ohne-signierung: true
+      vorbereitung: |
+        cat > ntfy/GoogleService-Info.plist <<'PLIST'
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>API_KEY</key><string>ci-placeholder</string>
+          <key>GCM_SENDER_ID</key><string>000000000000</string>
+          <key>BUNDLE_ID</key><string>de.godsapp.ntfy</string>
+          <key>PROJECT_ID</key><string>ci-placeholder</string>
+          <key>GOOGLE_APP_ID</key><string>1:000000000000:ios:0000000000000000</string>
+          <key>IS_ADS_ENABLED</key><false/>
+          <key>IS_ANALYTICS_ENABLED</key><false/>
+          <key>IS_APPINVITE_ENABLED</key><false/>
+          <key>IS_GCM_ENABLED</key><true/>
+          <key>IS_SIGNIN_ENABLED</key><false/>
+        </dict>
+        </plist>
+        PLIST
+      # Aufgelöste Paketversionen, damit Package.resolved ohne lokalen Mac
+      # aktualisiert werden kann.
+      artefakt: ntfy-ios.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
