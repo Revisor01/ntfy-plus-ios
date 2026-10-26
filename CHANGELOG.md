@@ -10,6 +10,9 @@ und dieses Projekt folgt [Semantic Versioning 2.0.0](https://semver.org/lang/de/
 ### Geändert
 - Neue Lizenz: GNU AGPL v3.0 statt GPL-3.0: Die Pflicht, Änderungen offenzulegen, gilt jetzt auch für den Betrieb als Webdienst.
 
+### Behoben
+- Die App meldet sich jetzt als deutschsprachig; Datumsauswahl und Systemknöpfe erscheinen auf Deutsch, der App Store nennt Deutsch als Sprache.
+
 ### Sonstiges
 
 - Automatische Tests prüfen jetzt bei jeder Änderung, ob Nachrichten, Prioritäten, Tags und Eingaben richtig verarbeitet werden.
