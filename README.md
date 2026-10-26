@@ -116,7 +116,14 @@ der ntfy-Server stellt Push-Nachrichten über diesen Weg zu.
 
 ## Lizenz
 
-ntfy+ steht unter der [GNU General Public License v3.0](LICENSE).
+ntfy+ steht unter der
+[GNU Affero General Public License v3.0](LICENSE). Wer ntfy+ verändert und
+anderen zur Verfügung stellt, auch als Webdienst, legt seinen Quelltext unter
+derselben Lizenz offen. Wer das nicht möchte, bekommt auf Anfrage eine
+kommerzielle Lizenz ([mail@simonluthe.de](mailto:mail@simonluthe.de)). Für
+Beiträge gilt [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Die Fassungen im App Store verteilt der Urheber als Rechteinhaber selbst.
 
 ## Hinweis
 
