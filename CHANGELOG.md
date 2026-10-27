@@ -17,7 +17,7 @@ und dieses Projekt folgt [Semantic Versioning 2.0.0](https://semver.org/lang/de/
 
 - Release-Builds entstehen in Xcode Cloud; der Release-Knopf auf GitHub startet sie und wartet darauf.
 - Automatische Tests prüfen jetzt bei jeder Änderung, ob Nachrichten, Prioritäten, Tags und Eingaben richtig verarbeitet werden.
-- README, Vorlagen für Issues und Pull Requests sowie die Hinweise zu Sicherheit und Mitmachen gibt es jetzt auch auf Englisch.
+- README, Vorlagen und Hinweise gibt es nur noch auf Deutsch.
 
 ## [2.2.0] - 2026-10-25
 

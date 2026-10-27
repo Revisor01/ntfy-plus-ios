@@ -10,10 +10,6 @@
 </p>
 
 <p align="center">
-  <b>Deutsch</b> · <a href="README.en.md">English</a>
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/badge/Platform-iOS%2027+-blue?logo=apple" alt="Platform">
   <img src="https://img.shields.io/badge/Swift-6.0-orange?logo=swift" alt="Swift">
   <img src="https://img.shields.io/badge/Xcode-27+-blue?logo=xcode" alt="Xcode">
