@@ -4,12 +4,7 @@ import os.log
 private let logger = Logger(subsystem: "de.godsapp.ntfy.NotificationServiceExtension", category: "PollRequest")
 
 // MARK: - PollRequestFetcher
-//
-// Bei Topics ohne anonymen Lesezugriff schickt der ntfy-Server statt des Inhalts ein
-// "poll_request" (Platzhalter "New message" + poll_id). Der echte Inhalt wird hier per
-// GET <server>/<topic>/json?poll=1&id=<poll_id> mit den Zugangsdaten aus der geteilten
-// Keychain abgerufen. Ist das Topic auf mehreren Servern abonniert, werden diese der
-// Reihe nach probiert, bis einer die Nachricht liefert.
+// Holt bei poll_request den echten Inhalt per GET <server>/<topic>/json?poll=1&id=<poll_id>, Server der Reihe nach.
 
 // @unchecked Sendable: veraenderlicher Zustand (currentTask, isCancelled) nur unter `lock`
 final class PollRequestFetcher: @unchecked Sendable {
@@ -32,8 +27,7 @@ final class PollRequestFetcher: @unchecked Sendable {
         session = URLSession(configuration: configuration)
     }
 
-    /// Ruft die Nachricht ab. `completion` wird genau einmal aufgerufen
-    /// (auf einer Hintergrund-Queue), mit nil bei Fehler/Timeout/Abbruch.
+    /// Ruft die Nachricht ab; `completion` kommt genau einmal, mit nil bei Fehler oder Timeout.
     func fetch(topic: String,
                pollId: String,
                servers: [String],
@@ -118,8 +112,7 @@ final class PollRequestFetcher: @unchecked Sendable {
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
-        // Gleiche Reihenfolge wie NtfyService.authHeader: Token vor Basic-Auth.
-        // Keychain-Keys verwenden die unveraenderte serverURL (wie in der App).
+        // Wie NtfyService.authHeader: Token vor Basic-Auth, Keychain-Key mit unveränderter serverURL.
         if let token = SharedKeychain.loadToken(serverURL: serverURL), !token.isEmpty {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         } else if let credentials = SharedKeychain.loadCredentials(serverURL: serverURL),
@@ -130,8 +123,7 @@ final class PollRequestFetcher: @unchecked Sendable {
         return request
     }
 
-    /// Antwort ist newline-delimited JSON. Akzeptiert ausschliesslich die Nachricht
-    /// mit der poll_id — eine andere Nachricht wuerde falschen Inhalt anzeigen.
+    /// Nimmt aus dem NDJSON nur die Nachricht mit der poll_id, sonst würde falscher Inhalt angezeigt.
     private static func parseMessage(data: Data, pollId: String) -> [String: Any]? {
         guard let text = String(data: data, encoding: .utf8) else { return nil }
         for line in text.split(separator: "\n") {

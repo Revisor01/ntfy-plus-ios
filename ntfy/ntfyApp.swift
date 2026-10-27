@@ -3,7 +3,6 @@ import SwiftData
 
 @main
 struct ntfyApp: App {
-    // Register AppDelegate for Firebase
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     @State private var modelContainer: ModelContainer?
@@ -14,7 +13,6 @@ struct ntfyApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        // Register notification categories (delegate is now handled by AppDelegate)
         NotificationService.shared.registerNotificationCategories()
     }
 
@@ -74,7 +72,6 @@ struct ntfyApp: App {
         // Alten Container verwerfen, bevor die Store-Dateien geloescht werden
         modelContainer = nil
         SharedModel.container = nil
-        // Delete SwiftData store files (base store + WAL/SHM sibling files)
         let directory = URL.applicationSupportDirectory
         for suffix in ["", "-shm", "-wal"] {
             let fileURL = directory.appendingPathComponent("default.store" + suffix)
@@ -86,9 +83,7 @@ struct ntfyApp: App {
 
 // MARK: - SharedModel
 
-/// Einziger ModelContainer der App. Wird von ntfyApp (UI) und AppDelegate
-/// (Notification-Actions, auch wenn die UI nicht geladen ist) gemeinsam genutzt,
-/// damit nie zwei Container parallel auf denselben Store schreiben.
+/// Einziger ModelContainer der App, damit nie zwei Container auf denselben Store schreiben.
 @MainActor
 enum SharedModel {
     static var container: ModelContainer?
@@ -115,17 +110,13 @@ enum SharedModel {
 
 // MARK: - PendingMessageImporter
 
-/// Format der von der NotificationServiceExtension geschriebenen Dateien
-/// (`pending-messages/<id>.json` im App-Group-Container).
+/// Format der Dateien, die die NSE unter `pending-messages/` ablegt.
 private struct PendingMessageEnvelope: Decodable {
     let serverURL: String?
     let message: NtfyMessage
 }
 
-/// Uebernimmt Push-Nachrichten, die die NSE im App-Group-Container abgelegt hat,
-/// in SwiftData (via NtfyService.storeMessages — Dedup/Upsert inklusive) und
-/// loescht die Dateien danach. Bereits gespeicherte Nachrichten (z.B. per SSE
-/// vollstaendig empfangen) werden nicht durch den ggf. gekuerzten FCM-Payload ersetzt.
+/// Übernimmt von der NSE abgelegte Nachrichten, ohne vollständige durch gekürzte zu ersetzen.
 @MainActor
 enum PendingMessageImporter {
     static let appGroup = "group.de.godsapp.ntfy"
@@ -149,8 +140,7 @@ enum PendingMessageImporter {
         let decoder = JSONDecoder()
 
         for file in pendingFiles {
-            // Datei in jedem Fall entfernen — auch unlesbare oder nicht zuordenbare,
-            // sonst sammeln sie sich dauerhaft an
+            // Datei immer entfernen, sonst sammeln sich unlesbare an.
             defer { try? fileManager.removeItem(at: file) }
 
             guard let data = try? Data(contentsOf: file),
@@ -160,8 +150,7 @@ enum PendingMessageImporter {
             }
             let message = envelope.message
 
-            // Topic per (serverURL, name) suchen — ist der Server unbekannt
-            // (Topic-Name auf mehreren Servern), nur per Name
+            // Bei unbekanntem Server nur per Name suchen.
             let matchedTopic: Topic?
             if let serverURL = envelope.serverURL {
                 matchedTopic = topics.first(where: { $0.name == message.topic && $0.serverURL == serverURL })
@@ -170,8 +159,7 @@ enum PendingMessageImporter {
             }
             guard let topic = matchedTopic else { continue }
 
-            // Schon vorhanden (SSE/Polling) — der Push-Payload ist ggf. gekuerzt
-            // (truncated) und darf die vollstaendige Nachricht nicht ueberschreiben
+            // Schon vorhanden: der gekürzte Push darf die vollständige Nachricht nicht ersetzen.
             let messageId = message.id
             let existingDescriptor = FetchDescriptor<StoredMessage>(
                 predicate: #Predicate<StoredMessage> { $0.messageId == messageId }
@@ -196,8 +184,7 @@ enum PendingMessageImporter {
             NtfyService.shared.writeWidgetData(context: context)
         }
 
-        // Badge auf den tatsaechlichen Ungelesen-Stand setzen (auch der NSE-Zaehler
-        // wird damit korrigiert, z.B. wenn Push-Nachrichten bereits per SSE da waren)
+        // Badge auf den echten Ungelesen-Stand, korrigiert auch den Zähler der NSE.
         Task {
             await NotificationService.shared.syncBadgeWithUnreadCount(context: context)
         }

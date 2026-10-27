@@ -71,15 +71,13 @@ struct AddTopicView: View {
 
     private var isValid: Bool {
         let name = topicName.trimmed()
-        // Bei "Eigener Server" muss die eingegebene URL gueltig sein —
-        // ein vorher gewaehlter Server zaehlt dann nicht
+        // Bei "Eigener Server" zählt nur die eingegebene URL.
         return name.isValidNtfyTopicName && targetServerURL != nil && !isDuplicate
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                // Topic name
                 Section {
                     TextField("Topic-Name", text: $topicName)
                         .textInputAutocapitalization(.never)
@@ -95,7 +93,6 @@ struct AddTopicView: View {
                     }
                 }
 
-                // Server selection
                 Section {
                     if !servers.isEmpty && !useCustomServer {
                         Picker("Server", selection: $selectedServer) {
@@ -123,7 +120,6 @@ struct AddTopicView: View {
                     }
                 }
 
-                // Authentication
                 if useCustomServer || (selectedServer?.useAuth ?? false) {
                     Section {
                         Toggle("Authentifizierung", isOn: $useAuth)
@@ -151,9 +147,7 @@ struct AddTopicView: View {
                     }
                 }
 
-                // Appearance
                 Section {
-                    // Preview
                     HStack {
                         Spacer()
                         topicPreview
@@ -161,7 +155,6 @@ struct AddTopicView: View {
                     }
                     .listRowBackground(Color.clear)
 
-                    // Toggle between letter and icon
                     Picker("Anzeige", selection: $useIcon) {
                         Text("Buchstabe").tag(false)
                         Text("Icon").tag(true)
@@ -169,7 +162,6 @@ struct AddTopicView: View {
                     .pickerStyle(.segmented)
 
                     if useIcon {
-                        // Icon picker
                         Button {
                             showingIconPicker = true
                         } label: {
@@ -183,7 +175,6 @@ struct AddTopicView: View {
                         }
                         .buttonStyle(.plain)
                     } else {
-                        // Letter input
                         HStack {
                             Text("Buchstabe")
                             Spacer()
@@ -199,7 +190,6 @@ struct AddTopicView: View {
                         }
                     }
 
-                    // Color picker
                     Button {
                         showingColorPicker = true
                     } label: {
@@ -218,7 +208,6 @@ struct AddTopicView: View {
                     Text("Du kannst einen Buchstaben (1-2 Zeichen) oder ein Icon wählen.")
                 }
 
-                // Error message
                 if let error = error {
                     Section {
                         Label(error, systemImage: AppIcons.error)
@@ -326,7 +315,6 @@ struct AddTopicView: View {
                     return
                 }
 
-                // Success - create topic
                 let topic = Topic(
                     name: topicNameTrimmed,
                     serverURL: serverURL,
@@ -338,8 +326,7 @@ struct AddTopicView: View {
 
                 modelContext.insert(topic)
 
-                // Store messages ueber den zentralen Pfad — setzt unreadCount,
-                // lastMessagePreview/-Priority/-IconURL und lastMessageAt korrekt
+                // Über den zentralen Pfad, der Zähler und Vorschau korrekt setzt.
                 ntfyService.storeMessages(for: topic, messages: messages, context: modelContext)
 
                 // Save credentials if authentication is used (including the default server)
@@ -360,7 +347,6 @@ struct AddTopicView: View {
                 try? modelContext.save()
                 ntfyService.writeWidgetData(context: modelContext)
 
-                // Subscribe to Firebase topic for push notifications
                 FirebaseService.shared.subscribeToTopic(serverURL: serverURL, topic: topicNameTrimmed)
 
                 await MainActor.run {

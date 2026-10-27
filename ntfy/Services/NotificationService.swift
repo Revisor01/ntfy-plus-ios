@@ -20,9 +20,7 @@ final class NotificationService: NSObject {
 
     func requestAuthorization() async -> Bool {
         do {
-            // Einziger Autorisierungs-Pfad der App (AppDelegate ruft ebenfalls hierher).
-            // Ohne .provisional: sonst landet die App je nach Aufrufreihenfolge still
-            // in der Mitteilungszentrale statt den regulaeren Dialog zu zeigen.
+            // Ohne .provisional, sonst landet die App still in der Mitteilungszentrale.
             let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
             if granted {
                 registerForRemoteNotifications()
@@ -49,9 +47,7 @@ final class NotificationService: NSObject {
         await center.deliveredNotifications().count
     }
 
-    /// Geteilter Badge-Zaehler im App-Group-Container. Die NotificationServiceExtension
-    /// inkrementiert ihn pro Push; die App schreibt bei jedem Setzen den massgeblichen Wert,
-    /// damit die NSE vom richtigen Stand aus weiterzaehlt.
+    /// Geteilter Badge-Zähler; die App schreibt den maßgeblichen Wert, die NSE zählt davon weiter.
     nonisolated static var sharedBadgeFileURL: URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.de.godsapp.ntfy")?
             .appendingPathComponent("badge_count.txt")
@@ -84,10 +80,7 @@ final class NotificationService: NSObject {
 
     // MARK: - Notification Management
 
-    /// Entfernt die Mitteilung(en) zu einer Request- oder ntfy-Nachrichten-ID. Push-
-    /// Mitteilungen haben eine von APNs vergebene Request-ID — sie werden ueber
-    /// `userInfo["id"]` gefunden. Aufrufe im selben Durchlauf (z.B. Schleifen) werden
-    /// zu einem einzigen Abgleich mit der Mitteilungszentrale gebuendelt.
+    /// Entfernt Mitteilungen zu einer ID; Aufrufe im selben Durchlauf werden gebündelt.
     func removeNotification(withIdentifier identifier: String) {
         center.removeDeliveredNotifications(withIdentifiers: [identifier])
         center.removePendingNotificationRequests(withIdentifiers: [identifier])
@@ -102,10 +95,7 @@ final class NotificationService: NSObject {
         }
     }
 
-    /// Entfernt zugestellte Mitteilungen, deren Request-ID oder `userInfo["id"]` /
-    /// `userInfo["messageId"]` einer der IDs entspricht. `sequence_id` wird bewusst
-    /// nicht verglichen: sonst verschwaende beim Ersetzen der alten Version auch die
-    /// Mitteilung des Updates (gleiche sequence_id).
+    /// Vergleicht nicht `sequence_id`, sonst verschwände auch die Mitteilung des Updates.
     func removeDeliveredNotifications(matchingMessageIds messageIds: Set<String>) async {
         guard !messageIds.isEmpty else { return }
         let delivered = await center.deliveredNotifications()
@@ -143,21 +133,18 @@ final class NotificationService: NSObject {
     // MARK: - Categories & Actions
 
     func registerNotificationCategories() {
-        // Mark as read action
         let markReadAction = UNNotificationAction(
             identifier: "MARK_READ",
             title: "Als gelesen markieren",
             options: []
         )
 
-        // Open URL action (if message has click URL)
         let openURLAction = UNNotificationAction(
             identifier: "OPEN_URL",
             title: "Link öffnen",
             options: [.foreground]
         )
 
-        // Reply action
         let replyAction = UNTextInputNotificationAction(
             identifier: "REPLY",
             title: "Antworten",
@@ -166,7 +153,6 @@ final class NotificationService: NSObject {
             textInputPlaceholder: "Nachricht eingeben..."
         )
 
-        // Message category
         let messageCategory = UNNotificationCategory(
             identifier: "NTFY_MESSAGE",
             actions: [markReadAction, openURLAction, replyAction],

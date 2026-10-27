@@ -17,8 +17,7 @@ struct ContentView: View {
     @State private var showingSettings = false
     @State private var showingPublish = false
     @State private var navigationPath = NavigationPath()
-    /// Topic-ID → Server/Name der aktiven SSE-Subscription (Name wird zum Abmelden
-    /// gebraucht, nachdem das Topic-Model bereits geloescht ist)
+    /// Server und Name je aktiver SSE-Subscription, der Name wird nach dem Löschen zum Abmelden gebraucht.
     @State private var subscribedTopicIds: [String: SubscribedTopic] = [:]
     /// Deep-Link-Ziel, das erst nach erfolgreicher Entsperrung angesteuert wird
     @State private var pendingDeepLinkTopic: String?
@@ -46,9 +45,7 @@ struct ContentView: View {
                     updateLockWindow()
                 }
             )
-            // Die Sperre selbst liegt in einem eigenen Fenster ueber allen Sheets/Alerts
-            // (LockWindowPresenter). Darunter: Inhalte fuer VoiceOver ausblenden und
-            // Views mitteilen, dass nichts als gelesen markiert werden darf.
+            // Die Sperre liegt in eigenem Fenster; darunter VoiceOver aus und nichts als gelesen markieren.
             .accessibilityHidden(isLocked)
             .environment(\.isAppLocked, isLocked)
             .onOpenURL { url in
@@ -86,9 +83,7 @@ struct ContentView: View {
                 }
             }
             .onChange(of: scenePhase) { _, newPhase in
-                // Beim Wechsel in den Hintergrund sofort sperren — Snapshot/Rueckkehr zeigt keine Inhalte
-                // (iPad-Multiwindow: nicht, solange ein anderes Fenster der App sichtbar ist —
-                // diese Szene selbst ist per Datenschutz-Abdeckung verdeckt)
+                // Im Hintergrund sofort sperren, damit der Snapshot keine Inhalte zeigt (nicht bei sichtbarem iPad-Fenster).
                 if newPhase == .background {
                     hasEnteredBackground = true
                     if AppSettings.biometricLockEnabled && !hasOtherForegroundScene {
@@ -140,8 +135,7 @@ struct ContentView: View {
         }
     }
 
-    /// Sperrbildschirm bzw. Datenschutz-Abdeckung im eigenen Fenster ueber allen
-    /// Sheets und Alerts einblenden oder ausblenden.
+    /// Sperrbildschirm und Datenschutz-Abdeckung im eigenen Fenster über allen Sheets.
     private func updateLockWindow() {
         let content: LockWindowContent
         if isLocked && scenePhase != .background {
@@ -250,8 +244,7 @@ struct ContentView: View {
         requestNavigation(toTopicNamed: topicName)
     }
 
-    /// Uebernimmt ein von AppDelegate gepuffertes Navigationsziel (Mitteilungs-Tap beim
-    /// Kaltstart, bevor ContentView existierte). Die Sperre wird dabei respektiert.
+    /// Übernimmt das von AppDelegate gepufferte Navigationsziel, unter Beachtung der Sperre.
     private func consumePendingNotificationNavigation() {
         guard hasCompletedOnboarding, !servers.isEmpty,
               let topicName = AppDelegate.pendingNotificationTopic else { return }
@@ -260,8 +253,7 @@ struct ContentView: View {
         requestNavigation(toTopicNamed: topicName)
     }
 
-    /// Navigiert zum Topic — bei aktiver Sperre erst nach erfolgreicher Entsperrung.
-    /// Ein Deep Link darf die biometrische Sperre NIE aufheben.
+    /// Navigiert zum Topic, bei Sperre erst nach dem Entsperren; ein Deep Link hebt sie nie auf.
     private func requestNavigation(toTopicNamed topicName: String) {
         if isLocked {
             pendingDeepLinkTopic = topicName
@@ -283,20 +275,17 @@ struct ContentView: View {
 
     // MARK: - Selection
 
-    /// "id|serverURL|name" der aktuell existierenden Topics — Ausloeser fuer den
-    /// Subscription-Abgleich (auch wenn sich nur Server-URL oder Name aendert).
+    /// "id|serverURL|name" aller Topics, Auslöser für den Subscription-Abgleich.
     private var subscriptionSyncKeys: Set<String> {
         Set(topics.filter { !$0.isDeleted && $0.modelContext != nil }.map { "\($0.id)|\($0.serverURL)|\($0.name)" })
     }
 
-    /// "serverURL|name|isMuted" aller Topics — Ausloeser fuer den Abgleich der
-    /// Stummschaltung mit der NotificationServiceExtension.
+    /// "serverURL|name|isMuted" aller Topics, Auslöser für den Stumm-Abgleich mit der NSE.
     private var muteSyncKeys: Set<String> {
         Set(topics.filter { !$0.isDeleted && $0.modelContext != nil }.map { "\($0.serverURL)|\($0.name)|\($0.isMuted)" })
     }
 
-    /// Setzt `selectedTopic` zurueck, wenn das Topic geloescht wurde, bevor die
-    /// Detailspalte ein ungueltiges Model rendert.
+    /// Setzt `selectedTopic` zurück, bevor die Detailspalte ein gelöschtes Model rendert.
     private func validateSelectedTopic() {
         guard let selected = selectedTopic else { return }
         // isDeleted/modelContext zuerst pruefen — weitere Property-Zugriffe auf geloeschte Models crashen
@@ -318,8 +307,7 @@ struct ContentView: View {
         await ntfyService.refreshTopics(topics, context: modelContext, since: "168h")
     }
 
-    /// Gleicht die SSE-Subscriptions mit den vorhandenen Topics ab:
-    /// neue Topics abonnieren, entfernte Topics abmelden.
+    /// Gleicht die SSE-Subscriptions mit den vorhandenen Topics ab.
     private func syncSubscriptions() {
         let currentTopics = topics.filter { !$0.isDeleted && $0.modelContext != nil }
         let currentIds = Set(currentTopics.map(\.id))
@@ -347,8 +335,7 @@ struct ContentView: View {
         }
     }
 
-    /// Baut die SSE-Subscriptions aller Topics eines Servers mit den aktuellen
-    /// Zugangsdaten neu auf (nach Aenderung im Server-Editor).
+    /// Baut die SSE-Subscriptions eines Servers mit den aktuellen Zugangsdaten neu auf.
     private func resubscribeTopics(ofServer serverURL: String) {
         let currentTopics = topics.filter { !$0.isDeleted && $0.modelContext != nil }
         let currentKeys = Set(currentTopics.map { SubscribedTopic(serverURL: $0.serverURL, name: $0.name) })
@@ -357,9 +344,7 @@ struct ContentView: View {
         }
     }
 
-    /// Abonniert das Topic neu (aktuelle URL + Keychain-Daten) und beendet danach die
-    /// alte Subscription, sofern kein anderes Topic sie noch nutzt. Neu vor alt, damit
-    /// der FCM-Refcount (TopicServerMap) bei gleichem Namen nie auf 0 faellt.
+    /// Abonniert neu vor dem Abmelden, damit der FCM-Refcount bei gleichem Namen nie auf 0 fällt.
     private func resubscribe(_ topic: Topic, replacing old: SubscribedTopic?, currentKeys: Set<SubscribedTopic>) {
         subscribe(to: topic)
 
@@ -376,7 +361,6 @@ struct ContentView: View {
 
         subscribedTopicIds[topic.id] = SubscribedTopic(serverURL: topic.serverURL, name: topic.name)
 
-        // Subscribe to Firebase topic for push notifications
         FirebaseService.shared.subscribeToTopic(serverURL: topic.serverURL, topic: topic.name)
 
         let token = KeychainManager.shared.loadToken(serverURL: topic.serverURL)
@@ -423,12 +407,7 @@ private struct SubscribedTopic: Hashable {
 
 // MARK: - Stummgeschaltete Topics (App Group)
 
-/// Schreibt die stummgeschalteten Topics in die App-Group-UserDefaults, damit die
-/// NotificationServiceExtension Push-Mitteilungen dieser Topics still zustellt.
-/// Format (siehe SharedStore in der NSE):
-/// - `mutedTopicKeys`: ["<serverURL>|<name>"] aller stummen Topics
-/// - `mutedTopicNames`: Namen, bei denen ALLE gleichnamigen Topics stumm sind
-///   (fuer Pushes, deren Server die NSE nicht eindeutig kennt)
+/// Schreibt die stummen Topics in die App-Group-UserDefaults, damit die NSE deren Pushes still zustellt.
 @MainActor
 private enum MutedTopicsSync {
     static let appGroup = "group.de.godsapp.ntfy"
@@ -475,8 +454,7 @@ private enum LockWindowContent {
     case lockScreen
 }
 
-/// Inhalt des Sperrfensters. Stabile Wurzel, damit der LockScreenView-State
-/// (z.B. "bereits automatisch authentifiziert") bei Phasenwechseln erhalten bleibt.
+/// Stabile Wurzel des Sperrfensters, damit der LockScreenView-State erhalten bleibt.
 private struct LockWindowRootView: View {
     let content: LockWindowContent
     let isSceneActive: Bool
@@ -506,8 +484,7 @@ private struct LockWindowRootView: View {
     }
 }
 
-/// App-weiter Sperrzustand — von allen ContentViews (eine pro Szene) geteilt, damit
-/// eine Entsperrung in einem Fenster alle Fenster freigibt.
+/// Sperrzustand aller Szenen, damit eine Entsperrung alle Fenster freigibt.
 @Observable
 @MainActor
 private final class AppLockState {
@@ -568,10 +545,7 @@ private final class WindowSceneReaderView: UIView {
     }
 }
 
-/// Zeigt Sperrbildschirm und Datenschutz-Abdeckung in je einem eigenen UIWindow pro
-/// UIWindowScene oberhalb der Alert-Ebene — ein Overlay im SwiftUI-Baum liegt unter
-/// Sheets, Alerts und Popovers und wuerde deren Inhalte nicht verdecken. Jede Szene
-/// (iPad-Multiwindow) bekommt ihr eigenes Sperrfenster; getrennte Szenen werden entfernt.
+/// Sperrfenster je Szene über der Alert-Ebene, weil ein SwiftUI-Overlay unter Sheets und Alerts liegt.
 @MainActor
 private final class LockWindowPresenter {
     static let shared = LockWindowPresenter()
@@ -603,8 +577,7 @@ private final class LockWindowPresenter {
     }
 
     private var entries: [ObjectIdentifier: Entry] = [:]
-    /// Szene, deren Sperrbildschirm automatisch authentifizieren darf — nur eine
-    /// gleichzeitig, sonst konkurrieren mehrere Face-ID-Dialoge.
+    /// Nur eine Szene authentifiziert automatisch, sonst konkurrieren Face-ID-Dialoge.
     private var autoAuthSceneID: ObjectIdentifier?
     private var disconnectObserver: NSObjectProtocol?
 
@@ -622,8 +595,7 @@ private final class LockWindowPresenter {
         }
     }
 
-    /// - Parameter requestedScene: Szene des aufrufenden ContentView; nil, solange sie
-    ///   noch nicht bekannt ist (dann nur bei genau einer verbundenen Szene diese nutzen).
+    /// - Parameter requestedScene: Szene des aufrufenden ContentView, nil solange unbekannt.
     func update(scene requestedScene: UIWindowScene?,
                 content: LockWindowContent,
                 isSceneActive: Bool,

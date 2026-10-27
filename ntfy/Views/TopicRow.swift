@@ -6,10 +6,8 @@ struct TopicRow: View {
 
     var body: some View {
         HStack(spacing: AppSpacing.sm) {
-            // Topic Icon
             topicIcon
 
-            // Content
             VStack(alignment: .leading, spacing: AppSpacing.xxs) {
                 HStack {
                     Text(topic.name)
@@ -46,7 +44,6 @@ struct TopicRow: View {
 
                     Spacer()
 
-                    // Unread badge
                     if topic.unreadCount > 0 {
                         Text("\(topic.unreadCount)")
                             .font(AppFonts.caption2)
@@ -64,7 +61,6 @@ struct TopicRow: View {
         .padding(.vertical, AppSpacing.xxs)
     }
 
-    // Generate a color from topic name for consistent colors
     private var generatedColor: Color {
         if let hex = topic.colorHex {
             return Color(hex: hex)

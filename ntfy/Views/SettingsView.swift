@@ -14,8 +14,7 @@ struct SettingsView: View {
     @State private var selectedTheme = AppSettings.appTheme
     @State private var hapticFeedback = AppSettings.hapticFeedback
     @State private var biometricLockEnabled = AppSettings.biometricLockEnabled
-    /// Tatsaechlicher Berechtigungsstatus aus UNUserNotificationCenter
-    /// (wird beim Anzeigen und bei Rueckkehr in die App aktualisiert)
+    /// Tatsächlicher Berechtigungsstatus, aktualisiert beim Anzeigen und bei Rückkehr.
     @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
 
     @State private var retentionDays = AppSettings.messageRetentionDays
@@ -43,7 +42,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Server section
                 Section {
                     ForEach(servers) { server in
                         Button {
@@ -87,7 +85,6 @@ struct SettingsView: View {
                     Text("Server")
                 }
 
-                // Appearance
                 Section {
                     Picker("Design", selection: $selectedTheme) {
                         ForEach(AppTheme.allCases, id: \.self) { theme in
@@ -123,7 +120,6 @@ struct SettingsView: View {
                     Text("Darstellung")
                 }
 
-                // Notifications
                 Section {
                     Toggle("Benachrichtigungen", isOn: Binding(
                         get: { notificationsAuthorized },
@@ -143,7 +139,6 @@ struct SettingsView: View {
                     }
                 }
 
-                // Data management
                 Section {
                     HStack {
                         Text("Topics")
@@ -192,7 +187,6 @@ struct SettingsView: View {
                     Text("Daten")
                 }
 
-                // About
                 Section {
                     HStack {
                         Text("Version")
@@ -222,7 +216,6 @@ struct SettingsView: View {
                     Text("Info")
                 }
 
-                // Footer
                 Section {
                 } footer: {
                     HStack {
@@ -321,8 +314,7 @@ struct SettingsView: View {
         let serverURL = server.url
         let wasDefault = server.isDefault || AppSettings.defaultServerURL == serverURL
 
-        // Topics dieses Servers mit demselben Pfad wie "Topic entfernen" aufraeumen
-        // (die Zugangsdaten werden gleich geloescht — die Topics waeren sonst verwaist)
+        // Topics des Servers aufräumen, sonst wären sie ohne Zugangsdaten verwaist.
         let topicPredicate = #Predicate<Topic> { $0.serverURL == serverURL }
         let serverTopics = (try? modelContext.fetch(FetchDescriptor<Topic>(predicate: topicPredicate))) ?? []
         for topic in serverTopics {
@@ -401,8 +393,7 @@ struct SettingsView: View {
         AppSettings.notificationsEnabled = notificationsAuthorized
     }
 
-    /// Einschalten fragt die Berechtigung an (bzw. oeffnet bei Ablehnung die
-    /// iOS-Einstellungen). Entziehen laesst sich die Berechtigung nur dort.
+    /// Einschalten fragt die Berechtigung an; entziehen lässt sie sich nur in den iOS-Einstellungen.
     private func setNotificationsEnabled(_ enabled: Bool) {
         if enabled {
             switch notificationStatus {
@@ -547,7 +538,6 @@ struct ServerEditorView: View {
         let serverURL = url.trimmed().normalizedServerURL(addProtocolIfMissing: false)
 
         Task {
-            // Test connection
             do {
                 let healthy = try await NtfyService.shared.checkServer(url: serverURL)
                 if !healthy {
@@ -568,15 +558,13 @@ struct ServerEditorView: View {
             await MainActor.run {
                 let targetServer: Server
                 if let existingServer = server {
-                    // Alte URL sichern, BEVOR sie ueberschrieben wird — die Keychain-
-                    // Eintraege sind unter der alten URL abgelegt
+                    // Alte URL sichern, die Keychain-Einträge liegen unter ihr.
                     let oldURL = existingServer.url
 
-                    // Clear old credentials (unter der alten URL)
+                    // Alte Zugangsdaten unter der alten URL löschen
                     try? KeychainManager.shared.deleteCredentials(serverURL: oldURL)
                     try? KeychainManager.shared.deleteToken(serverURL: oldURL)
 
-                    // Update existing
                     existingServer.name = name.trimmed()
                     existingServer.url = serverURL
                     existingServer.useAuth = useAuth
@@ -589,16 +577,12 @@ struct ServerEditorView: View {
                         for topic in serverTopics {
                             let topicName = topic.name
                             topic.serverURL = serverURL
-                            // Alte SSE-Verbindung beenden; FCM/Topic→Server-Map umziehen —
-                            // zuerst neu eintragen, damit der Refcount bei gleichem Namen
-                            // nicht auf 0 faellt und das FCM-Abo bestehen bleibt.
-                            // Das neue SSE-Abo baut ContentView auf (serverConfigurationChanged).
+                            // Neu eintragen vor dem Abmelden, damit der FCM-Refcount nicht auf 0 fällt.
                             NtfyService.shared.unsubscribe(serverURL: oldURL, topic: topicName)
                             FirebaseService.shared.subscribeToTopic(serverURL: serverURL, topic: topicName)
                             FirebaseService.shared.unsubscribeFromTopic(serverURL: oldURL, topic: topicName)
                         }
-                        // DeletedMessage-Records ebenfalls umziehen, sonst kommen
-                        // geloeschte Nachrichten beim naechsten Refresh zurueck
+                        // DeletedMessage-Records mit umziehen, sonst kommen gelöschte Nachrichten zurück.
                         let deletedPredicate = #Predicate<DeletedMessage> { $0.serverURL == oldURL }
                         let deletedRecords = (try? modelContext.fetch(FetchDescriptor<DeletedMessage>(predicate: deletedPredicate))) ?? []
                         for record in deletedRecords {
@@ -610,7 +594,6 @@ struct ServerEditorView: View {
                     }
                     targetServer = existingServer
                 } else {
-                    // Create new
                     let newServer = Server(
                         url: serverURL,
                         name: name.trimmed(),
@@ -622,7 +605,6 @@ struct ServerEditorView: View {
                     targetServer = newServer
                 }
 
-                // Save credentials
                 if useAuth {
                     if useToken {
                         try? KeychainManager.shared.saveToken(serverURL: serverURL, token: token)
@@ -635,10 +617,8 @@ struct ServerEditorView: View {
                     }
                 }
 
-                // Handle default server
                 if isDefault {
-                    // Make all other servers non-default — gegen die tatsaechliche
-                    // Ziel-ID vergleichen (bei neuem Server ist `server` nil)
+                    // Gegen die Ziel-ID vergleichen, bei neuem Server ist `server` nil.
                     let targetId = targetServer.id
                     let descriptor = FetchDescriptor<Server>()
                     if let allServers = try? modelContext.fetch(descriptor) {

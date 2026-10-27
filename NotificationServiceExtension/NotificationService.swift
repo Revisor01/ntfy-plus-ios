@@ -4,23 +4,19 @@ import os.log
 
 private let logger = Logger(subsystem: "de.godsapp.ntfy.NotificationServiceExtension", category: "NotificationService")
 
-// @unchecked Sendable: der Zustand wird in didReceive vor jedem Netzwerk-Callback gesetzt;
-// alles, was danach parallel (Callbacks vs. serviceExtensionTimeWillExpire) gelesen oder
-// geschrieben wird, liegt unter `deliveryLock`.
+// @unchecked Sendable: alles, was Callbacks und serviceExtensionTimeWillExpire parallel berühren, liegt unter `deliveryLock`.
 class NotificationService: UNNotificationServiceExtension, @unchecked Sendable {
 
     var contentHandler: ((UNNotificationContent) -> Void)?
     var bestAttemptContent: UNMutableNotificationContent?
 
-    /// Schuetzt contentHandler-Aufruf und Content-Mutation gegen den Wettlauf zwischen
-    /// Netzwerk-Callback (poll_request) und serviceExtensionTimeWillExpire.
+    /// Schützt Auslieferung und Content gegen den Wettlauf mit serviceExtensionTimeWillExpire.
     private let deliveryLock = NSLock()
     private var hasDelivered = false
     private var pollFetcher: PollRequestFetcher?
     private var attachmentDownloader: AttachmentDownloader?
 
-    /// Die NSE hat ca. 30 s; danach greift serviceExtensionTimeWillExpire.
-    /// Gemeinsames Budget fuer poll_request-Abruf und Bild-Download.
+    /// Gemeinsames Zeitbudget für poll_request und Bild-Download; die NSE hat ca. 30 s.
     private let pollBudget: TimeInterval = 22
     /// Ende des Zeitbudgets (ab didReceive)
     private var deadline = Date()
@@ -44,8 +40,7 @@ class NotificationService: UNNotificationServiceExtension, @unchecked Sendable {
         let payload = PushPayload(userInfo: request.content.userInfo)
         let topic = payload.topic
 
-        // message_delete/message_clear u.ae.: keine neue Nachricht — kein Badge,
-        // zugehoerige Mitteilung entfernen und moeglichst nichts anzeigen
+        // Events ohne neue Nachricht: kein Badge, zugehörige Mitteilung entfernen.
         if payload.event != "message" && payload.event != "poll_request" {
             handleNonMessageEvent(payload)
             return
@@ -54,11 +49,10 @@ class NotificationService: UNNotificationServiceExtension, @unchecked Sendable {
         // Subtitle (Topic) entfernen
         content.subtitle = ""
 
-        // Category für interaktive Actions (Als gelesen / Antworten / Link öffnen)
-        // auch bei Push-Notifications sichtbar machen — sonst nur bei lokalen Notifications
+        // Category auch bei Push setzen, sonst fehlen die interaktiven Actions.
         content.categoryIdentifier = "NTFY_MESSAGE"
 
-        // Thread identifier für Topic-Gruppierung (GROUP-01)
+        // Thread identifier für die Gruppierung nach Topic
         if !topic.isEmpty {
             content.threadIdentifier = topic
             if content.title.isEmpty {
@@ -118,8 +112,7 @@ class NotificationService: UNNotificationServiceExtension, @unchecked Sendable {
                     }
                 }
                 logger.info("🔔 poll_request aufgeloest, badge: \(newBadge, privacy: .public)")
-                // Bild-Anhang (falls vorhanden) in der Restzeit laden — Zugangsdaten nur
-                // fuer den Server, von dem die Nachricht stammt
+                // Bild in der Restzeit laden, Zugangsdaten nur für den Server der Nachricht.
                 self.deliverAfterAttachment(AttachmentInfo(message: result.message),
                                             authServers: [result.serverURL])
             }
@@ -152,11 +145,7 @@ class NotificationService: UNNotificationServiceExtension, @unchecked Sendable {
 
     // MARK: - Bild-Anhang
 
-    /// Laedt ein Bild-Attachment (falls vorhanden, klein genug und in der Restzeit
-    /// moeglich), haengt es an und liefert danach aus. Ohne Bild oder bei Fehlern wird
-    /// sofort bzw. ohne Anhang ausgeliefert — die Mitteilung scheitert nie am Anhang.
-    /// - Parameter authServers: Server, deren Zugangsdaten gesendet werden duerfen —
-    ///   aber nur, wenn der Anhang auf genau diesem Server liegt.
+    /// Hängt ein Bild an, falls möglich, und liefert aus; die Mitteilung scheitert nie am Anhang.
     private func deliverAfterAttachment(_ info: AttachmentInfo?, authServers: [String]) {
         guard let info, info.isDownloadableImage else {
             deliver()
@@ -193,10 +182,7 @@ class NotificationService: UNNotificationServiceExtension, @unchecked Sendable {
 
     // MARK: - Nicht-Nachrichten-Events
 
-    /// Fuer Events ohne neue Nachricht (z.B. message_delete/message_clear, falls als
-    /// Alert zugestellt): Badge nicht erhoehen, die zugestellte Mitteilung der Sequenz
-    /// entfernen und einen leeren Inhalt liefern. Ohne das Filtering-Entitlement kann
-    /// die NSE die Anzeige nicht garantiert unterdruecken.
+    /// Für Events ohne neue Nachricht: kein Badge, Mitteilung der Sequenz entfernen, leerer Inhalt.
     private func handleNonMessageEvent(_ payload: PushPayload) {
         logger.info("🔔 Event \(payload.event, privacy: .public) — keine neue Nachricht, kein Badge")
         bestAttemptContent = UNMutableNotificationContent()
@@ -223,8 +209,7 @@ class NotificationService: UNNotificationServiceExtension, @unchecked Sendable {
 
     // MARK: - Delivery
 
-    /// Aendert den Content unter dem Lock, ohne auszuliefern (nur solange noch nicht
-    /// ausgeliefert) — z.B. aufgeloeste poll_request-Nachricht vor dem Bild-Download.
+    /// Ändert den Content unter dem Lock, solange noch nicht ausgeliefert.
     private func updateContent(_ update: (UNMutableNotificationContent) -> Void) {
         deliveryLock.lock()
         defer { deliveryLock.unlock() }
@@ -232,8 +217,7 @@ class NotificationService: UNNotificationServiceExtension, @unchecked Sendable {
         update(content)
     }
 
-    /// Ruft den contentHandler genau einmal auf; `update` mutiert den Content vorher
-    /// unter demselben Lock (nur wenn noch nicht ausgeliefert).
+    /// Ruft den contentHandler genau einmal auf, nach `update` unter demselben Lock.
     private func deliver(_ update: ((UNMutableNotificationContent) -> Void)? = nil) {
         deliveryLock.lock()
         guard !hasDelivered, let handler = contentHandler, let content = bestAttemptContent else {
@@ -246,8 +230,7 @@ class NotificationService: UNNotificationServiceExtension, @unchecked Sendable {
         handler(content)
     }
 
-    /// Ersetzt den poll_request-Platzhalter durch die abgerufene Nachricht und setzt
-    /// die userInfo-Felder, die AppDelegate (Tap, MARK_READ, REPLY, OPEN_URL) erwartet.
+    /// Ersetzt den poll_request-Platzhalter und setzt die userInfo-Felder, die AppDelegate erwartet.
     private static func applyResolvedMessage(_ message: [String: Any],
                                              serverURL: String,
                                              topic: String,

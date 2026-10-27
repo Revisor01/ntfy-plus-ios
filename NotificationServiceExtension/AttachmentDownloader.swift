@@ -95,10 +95,7 @@ struct AttachmentInfo: Sendable {
 
 // MARK: - AttachmentDownloader
 
-/// Laedt ein Bild-Attachment herunter und erzeugt daraus ein `UNNotificationAttachment`.
-/// Zugangsdaten werden nur mitgeschickt, wenn der Anhang auf dem Server des Topics liegt;
-/// bei Redirects auf einen anderen Host wird der Authorization-Header entfernt.
-/// Fehler fuehren nie zum Scheitern der Mitteilung — `completion` liefert dann nil.
+/// Lädt ein Bild-Attachment; Zugangsdaten nur für den Server des Topics, Fehler liefern nil statt die Mitteilung scheitern zu lassen.
 final class AttachmentDownloader: @unchecked Sendable {
     // @unchecked: veraenderlicher Zustand (currentTask, isCancelled, isFinished) nur unter `lock`
     private let session: URLSession
@@ -118,8 +115,7 @@ final class AttachmentDownloader: @unchecked Sendable {
                              delegateQueue: nil)
     }
 
-    /// Startet den Download. `completion` wird genau einmal aufgerufen
-    /// (auf einer Hintergrund-Queue), mit nil bei Fehler/Abbruch/zu grossem Anhang.
+    /// Startet den Download; `completion` kommt genau einmal, mit nil bei Fehler oder zu großem Anhang.
     func download(_ info: AttachmentInfo,
                   authServers: [String],
                   completion: @escaping @Sendable (UNNotificationAttachment?) -> Void) {
@@ -228,8 +224,7 @@ final class AttachmentDownloader: @unchecked Sendable {
 
     // MARK: Auth
 
-    /// Authorization-Header des Servers, auf dem der Anhang liegt (gleiches Scheme,
-    /// gleicher Host, gleicher Port). Fremde Hosts bekommen keine Zugangsdaten.
+    /// Authorization-Header nur für denselben Scheme, Host und Port.
     private static func authorization(for url: URL, servers: [String]) -> String? {
         for serverURL in servers {
             var base = serverURL
@@ -238,8 +233,7 @@ final class AttachmentDownloader: @unchecked Sendable {
             }
             guard AttachmentRedirectGuard.isSameOrigin(URL(string: base), url) else { continue }
 
-            // Gleiche Reihenfolge wie NtfyService.authHeader: Token vor Basic-Auth.
-            // Keychain-Keys verwenden die unveraenderte serverURL (wie in der App).
+            // Wie NtfyService.authHeader: Token vor Basic-Auth, Keychain-Key mit unveränderter serverURL.
             if let token = SharedKeychain.loadToken(serverURL: serverURL), !token.isEmpty {
                 return "Bearer \(token)"
             }
@@ -256,11 +250,9 @@ final class AttachmentDownloader: @unchecked Sendable {
 
 // MARK: - Redirect-Schutz
 
-/// Entfernt den Authorization-Header bei Redirects auf einen anderen Scheme/Host/Port
-/// (gleiche Regel wie RedirectAuthGuard in der App). Keine gespeicherten Properties.
+/// Entfernt den Authorization-Header bei Redirects auf einen anderen Scheme, Host oder Port.
 final class AttachmentRedirectGuard: NSObject, URLSessionTaskDelegate, Sendable {
-    // Completion-Handler-Variante statt `async`: Mit Approachable Concurrency stuerzte
-    // der Swift-Compiler beim Erzeugen des ObjC-Thunks der async-Variante ab (SILGen).
+    // Completion-Handler statt async: die async-Variante ließ den Compiler beim ObjC-Thunk abstürzen.
     func urlSession(
         _ session: URLSession,
         task: URLSessionTask,

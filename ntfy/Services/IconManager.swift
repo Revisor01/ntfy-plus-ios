@@ -4,11 +4,7 @@ import Observation
 
 // MARK: - Image Downloader
 
-/// Laedt Bilddaten (Icons, Bild-Anhaenge) mit Groessenlimit. Liegt das Bild auf einem
-/// konfigurierten Server (gleiches Scheme/Host/Port), werden dessen Zugangsdaten
-/// mitgeschickt — so laden auch geschuetzte Anhaenge. Fremde Hosts bekommen keine
-/// Zugangsdaten; bei Redirects auf einen anderen Host entfernt RedirectAuthGuard den
-/// Authorization-Header.
+/// Lädt Bilder mit Größenlimit; Zugangsdaten nur für konfigurierte Server, Redirects prüft RedirectAuthGuard.
 enum ImageDownloader {
     /// Maximale Groesse fuer Icons
     static let iconMaxBytes = 2 * 1024 * 1024
@@ -57,8 +53,7 @@ enum ImageDownloader {
         return nil
     }
 
-    /// Streamt die Antwort und bricht ab, sobald das Limit ueberschritten wird
-    /// (Content-Length wird vorab geprueft, falls vorhanden).
+    /// Streamt und bricht beim Überschreiten des Limits ab.
     private static func fetch(url: URL, maxBytes: Int, authorization: String?) async throws -> Data? {
         var request = URLRequest(url: url)
         if let authorization {
@@ -181,17 +176,14 @@ final class IconManager {
     // MARK: - Icon Loading
 
     func loadIcon(from urlString: String) async -> UIImage? {
-        // Check cache first
         if let cached = cache.object(forKey: urlString as NSString) {
             return cached
         }
 
-        // Check if already loading
         if let existingTask = loadingTasks[urlString] {
             return await existingTask.value
         }
 
-        // Start new loading task
         let task = Task<UIImage?, Never> {
             guard let url = URL(string: urlString),
                   let data = await ImageDownloader.loadData(from: url, maxBytes: ImageDownloader.iconMaxBytes),
@@ -199,10 +191,8 @@ final class IconManager {
                 return nil
             }
 
-            // Resize if too large
             let resized = resizeImageIfNeeded(image, maxSize: CGSize(width: 128, height: 128))
 
-            // Cache the result
             cache.setObject(resized, forKey: urlString as NSString)
 
             return resized
@@ -330,13 +320,11 @@ struct CachedAsyncImage<Placeholder: View, Failure: View>: View {
         guard let urlString = url, !urlString.isEmpty else { return }
 
         if useDiskCache {
-            // Disk-Cache pruefen
             if let cached = AttachmentImageCache.shared.loadFromDisk(for: urlString) {
                 image = cached
                 return
             }
 
-            // Netzwerk-Download
             isLoading = true
             guard let url = URL(string: urlString) else {
                 isLoading = false
@@ -350,7 +338,6 @@ struct CachedAsyncImage<Placeholder: View, Failure: View>: View {
                 didFail = true
                 return
             }
-            // Auf Disk speichern
             AttachmentImageCache.shared.saveToDisk(data, for: urlString)
             image = downloaded
             isLoading = false

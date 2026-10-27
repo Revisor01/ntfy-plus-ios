@@ -1,17 +1,7 @@
 import os.log
 
 // MARK: - AppLog
-//
-// Zentraler Logging-Wrapper ueber os.Logger mit expliziten Privacy-Annotationen.
-// Ersetzt print()-Aufrufe im gesamten ntfy-Target. Die NotificationServiceExtension
-// nutzt bereits os.Logger — dieser Wrapper folgt demselben, projektintern etablierten
-// Muster, damit Diagnose auch in Release-Builds moeglich bleibt (im Gegensatz zu
-// #if DEBUG, das Logs in Release komplett entfernen wuerde).
-//
-// Sensible Werte (APNs-/FCM-Token, Topic-Namen — bei ntfy das Zugangsgeheimnis)
-// werden an der Aufrufstelle mit `privacy: .private` interpoliert und in Release
-// redigiert (`<private>`). Nicht-sensible Werte (Statuscodes, Zaehler, Fehlerkategorien)
-// duerfen `privacy: .public` verwenden.
+// os.Logger statt print, damit Diagnose auch im Release geht; sensible Werte mit `privacy: .private`.
 
 enum AppLog {
     private static let subsystem = "de.godsapp.ntfy"

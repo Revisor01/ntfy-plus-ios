@@ -14,8 +14,7 @@ updates:
       actions:
         patterns: ["*"]
 
-  # Swift Package Manager (Firebase) ueber die eingecheckte Package.resolved
-  # des Xcode-Projekts
+  # Swift Package Manager (Firebase) über die eingecheckte Package.resolved
   - package-ecosystem: swift
     directory: /
     schedule:

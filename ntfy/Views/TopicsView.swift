@@ -175,14 +175,12 @@ struct TopicsView: View {
     }
 
     private func deleteTopic(_ topic: Topic) {
-        // Auswahl vor dem Loeschen aufheben, damit die Detailansicht nicht
-        // gegen ein geloeschtes Model gerendert wird
+        // Auswahl vorher aufheben, damit die Detailansicht kein gelöschtes Model rendert.
         if selectedTopic?.id == topic.id {
             selectedTopic = nil
         }
 
-        // Gleicher Aufraeum-Pfad wie "Topic entfernen" in MessagesView
-        // (SSE/FCM, Benachrichtigungen, Nachrichten, DeletedMessage-Records, Badge, Widget)
+        // Gleicher Aufräumpfad wie "Topic entfernen" in MessagesView.
         withAnimation {
             TopicActions.remove(topic, context: modelContext, ntfyService: ntfyService)
         }
@@ -224,7 +222,6 @@ struct TopicsView: View {
         try? modelContext.save()
         ntfyService.writeWidgetData(context: modelContext)
 
-        // Clear notification badge
         Task {
             await NotificationService.shared.clearBadge()
         }

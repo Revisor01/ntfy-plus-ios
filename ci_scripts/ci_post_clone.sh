@@ -1,7 +1,5 @@
 #!/bin/bash
-# Xcode Cloud, nach dem Klonen: GoogleService-Info.plist liegt nicht im Repo.
-# Sie kommt base64-kodiert aus der geheimen Umgebungsvariable
-# GOOGLE_SERVICE_INFO_PLIST_B64 des Workflows; ohne sie kaeme kein Push an.
+# Xcode Cloud: GoogleService-Info.plist kommt aus GOOGLE_SERVICE_INFO_PLIST_B64, ohne sie kein Push.
 set -euo pipefail
 
 ZIEL="${CI_PRIMARY_REPOSITORY_PATH:?Nur fuer Xcode Cloud gedacht.}/ntfy/GoogleService-Info.plist"

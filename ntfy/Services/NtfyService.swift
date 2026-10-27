@@ -53,8 +53,7 @@ enum NtfyError: LocalizedError {
 // MARK: - Event-Typen & Sequenz-Schluessel
 
 extension NtfyMessage {
-    /// Schluessel, ueber den message_delete/message_clear und Updates eine Nachricht
-    /// identifizieren (ntfy: `sequence_id`, Fallback auf die eigene `id`).
+    /// Schlüssel einer Nachricht für Delete, Clear und Updates: `sequence_id`, sonst `id`.
     var sequenceKey: String {
         if let sequenceId, !sequenceId.isEmpty {
             return sequenceId
@@ -82,8 +81,7 @@ private enum SSEConfig {
     static let maxBackoffSeconds: UInt64 = 60
     /// Bei 429 nicht schneller als alle 30 s erneut versuchen
     static let rateLimitBackoffSeconds: UInt64 = 30
-    /// Erst eine so lange stabile Verbindung setzt den Backoff zurueck — sonst fuehren
-    /// Server, die nach HTTP 200 sofort schliessen, zu einer Reconnect-Schleife im Sekundentakt.
+    /// Erst so lange stabil setzt den Backoff zurück, sonst Reconnect-Schleife bei Servern, die sofort schließen.
     static let stableConnectionSeconds: TimeInterval = 30
     /// Anzahl zuletzt gesehener Event-IDs fuer die Dedup nach Reconnect (since=<id>)
     static let dedupWindow = 200
@@ -92,16 +90,14 @@ private enum SSEConfig {
 // MARK: - URL-Bau & HTTP-Helfer
 
 private enum NtfyHTTP {
-    /// Erlaubte Zeichen fuer ein einzelnes Pfadsegment — "/" und ";" werden kodiert,
-    /// damit Topic-Namen wie "a/b" oder "x?y" den Pfad nicht veraendern koennen.
+    /// Zeichen für ein Pfadsegment; "/" und ";" werden kodiert.
     static let pathSegmentAllowed: CharacterSet = {
         var set = CharacterSet.urlPathAllowed
         set.remove(charactersIn: "/;")
         return set
     }()
 
-    /// Erlaubte Zeichen fuer Query-Werte: nur RFC-3986-"unreserved" (ASCII). Alles andere
-    /// (inkl. "+", "&", "=", ",", Umlaute) wird prozentkodiert.
+    /// Für Query-Werte nur RFC-3986-"unreserved", alles andere prozentkodiert.
     static let queryValueAllowed = CharacterSet(
         charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
     )
@@ -114,8 +110,7 @@ private enum NtfyHTTP {
         return segment.addingPercentEncoding(withAllowedCharacters: pathSegmentAllowed)
     }
 
-    /// Baut `<serverURL>/<seg1>/<seg2>…?<query>` mit einzeln kodierten Pfadsegmenten.
-    /// Ohne Segmente entsteht `<serverURL>/` (z.B. fuer JSON-Publish).
+    /// Baut `<serverURL>/<seg1>/<seg2>…?<query>` mit einzeln kodierten Segmenten.
     static func url(serverURL: String, pathSegments: [String], queryItems: [URLQueryItem]? = nil) -> URL? {
         let trimmed = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
         guard var components = URLComponents(string: trimmed),
@@ -158,8 +153,7 @@ private enum NtfyHTTP {
 
 // MARK: - JSON-Publish Payload
 
-/// Body fuer `POST <serverURL>/` (docs.ntfy.sh/publish/#publish-as-json).
-/// nil-Felder werden vom synthetisierten Encoder weggelassen.
+/// Body für `POST <serverURL>/` (docs.ntfy.sh/publish/#publish-as-json).
 private struct PublishPayload: Encodable {
     let topic: String
     let message: String
@@ -179,17 +173,13 @@ private struct PublishPayload: Encodable {
 
 /// Limits fuer Datei-Uploads (PUT mit Datei als Body)
 enum NtfyUploadLimits {
-    /// Clientseitige Obergrenze; ntfy.sh erlaubt 15 MB, selbst gehostete Server
-    /// koennen per `attachment-file-size-limit` ein anderes Limit setzen.
+    /// Clientseitige Obergrenze; ntfy.sh erlaubt 15 MB.
     static let maxAttachmentBytes = 15 * 1024 * 1024
 }
 
 // MARK: - Redirect-Schutz
 
-/// Entfernt den Authorization-Header, wenn ein Redirect auf einen anderen
-/// Scheme/Host/Port zeigt als der urspruengliche Request — Zugangsdaten
-/// duerfen nicht an fremde Server weitergereicht werden.
-/// Keine gespeicherten Properties → echtes Sendable ohne @unchecked.
+/// Entfernt den Authorization-Header bei Redirects auf einen fremden Scheme, Host oder Port.
 final class RedirectAuthGuard: NSObject, URLSessionTaskDelegate, Sendable {
     func urlSession(
         _ session: URLSession,
@@ -314,9 +304,7 @@ final class NtfyService {
 
     // MARK: - Fetch Messages
 
-    /// Liefert den effektiven Nachrichtenbestand (neueste zuerst): Updates mit gleicher
-    /// sequence_id ersetzen fruehere Versionen, per message_delete geloeschte Nachrichten fehlen.
-    /// Fuer das vollstaendige Event-Protokoll (inkl. delete/clear) siehe `fetchEvents`.
+    /// Effektiver Nachrichtenbestand, neueste zuerst; das volle Event-Protokoll liefert `fetchEvents`.
     func fetchMessages(
         serverURL: String,
         topic: String,
@@ -350,9 +338,7 @@ final class NtfyService {
         return latestBySequence.values.sorted { $0.time > $1.time }
     }
 
-    /// Pollt alle zustandsrelevanten Events (message, message_delete, message_clear)
-    /// in Server-Reihenfolge (chronologisch). Wird von `refreshTopics` genutzt, damit
-    /// Loesch-/Clear-Events auch beim Polling angewendet werden.
+    /// Pollt message, message_delete und message_clear in Server-Reihenfolge.
     func fetchEvents(
         serverURL: String,
         topic: String,
@@ -399,15 +385,12 @@ final class NtfyService {
                 throw NtfyError.serverError(httpResponse.statusCode)
             }
 
-            // Server kappt Replays (10 MB pro Topic) und liefert dann nur die NEUESTEN
-            // Nachrichten — aeltere sind verloren. Ein Folge-Request mit since=<letzte ID>
-            // braechte sie nicht zurueck (er liefert nur Neueres), daher nur protokollieren.
+            // Der Server kappt Replays; ältere Nachrichten sind verloren, since= brächte sie nicht zurück.
             if let truncated = httpResponse.value(forHTTPHeaderField: "X-Messages-Truncated"),
                truncated == "1" || truncated.lowercased() == "true" {
                 AppLog.network.warning("⚠️ Poll gekuerzt (X-Messages-Truncated) fuer \(topic, privacy: .private) — aeltere Nachrichten wurden vom Server weggelassen")
             }
 
-            // Parse newline-delimited JSON
             let lines = String(data: data, encoding: .utf8)?.split(separator: "\n") ?? []
             let decoder = JSONDecoder()
 
@@ -432,8 +415,7 @@ final class NtfyService {
 
     // MARK: - Publish Message
 
-    /// Veroeffentlicht per JSON-Publish (`POST <serverURL>/`). Anders als HTTP-Header
-    /// transportiert JSON Umlaute/Emoji in Titel und Tags korrekt.
+    /// JSON-Publish, weil Header Umlaute und Emoji nicht sicher transportieren.
     func publish(
         serverURL: String,
         topic: String,
@@ -514,10 +496,7 @@ final class NtfyService {
 
     // MARK: - Publish Attachment (Datei-Upload)
 
-    /// Laedt eine Datei als Anhang hoch (`PUT <serverURL>/<topic>`, Body = Dateiinhalt,
-    /// docs.ntfy.sh/publish/#attach-local-file). Alle weiteren Felder laufen als
-    /// Query-Parameter — anders als HTTP-Header sind sie per Prozent-Kodierung
-    /// UTF-8-sicher (Umlaute/Emoji in Titel und Nachricht).
+    /// Lädt eine Datei als Anhang hoch; Felder als Query-Parameter, weil die UTF-8-sicher sind.
     func publishAttachment(
         serverURL: String,
         topic: String,
@@ -582,8 +561,7 @@ final class NtfyService {
               var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw NtfyError.invalidURL
         }
-        // Strikte Kodierung: URLComponents.queryItems laesst "+", "&"-nahe Zeichen u.a.
-        // stehen — der Go-Server wuerde "+" als Leerzeichen lesen.
+        // Strikt kodieren: der Go-Server liest "+" als Leerzeichen.
         var encodedPairs: [String] = []
         for (name, value) in parameters {
             guard let encodedValue = value.addingPercentEncoding(withAllowedCharacters: NtfyHTTP.queryValueAllowed) else {
@@ -644,12 +622,7 @@ final class NtfyService {
 
     // MARK: - Subscribe (SSE)
 
-    /// Abonniert ein Topic per SSE. Reconnects laufen mit exponentiellem Backoff und
-    /// `since=<letzte Event-ID>`, damit waehrend der Unterbrechung verpasste Events nachgeliefert werden.
-    /// - Parameters:
-    ///   - onMessage: neues/aktualisiertes `message`-Event
-    ///   - onDelete: `message_delete`-Event (Ziel steht in `sequenceId` bzw. `sequenceKey`)
-    ///   - onClear: `message_clear`-Event (Ziel steht in `sequenceId` bzw. `sequenceKey`)
+    /// Abonniert ein Topic per SSE; Reconnects mit Backoff und `since=`, damit nichts verloren geht.
     func subscribe(
         serverURL: String,
         topic: String,
@@ -662,7 +635,6 @@ final class NtfyService {
     ) {
         let key = subscriptionKey(serverURL: serverURL, topic: topic)
 
-        // Cancel existing subscription
         activeTasks[key]?.cancel()
 
         // Store config for reconnect (im @MainActor-Kontext — korrekt)
@@ -684,8 +656,7 @@ final class NtfyService {
 
         AppLog.network.info("🔌 SSE: Subscribing to \(topic, privacy: .private)")
 
-        // WICHTIG: Alle Werte als lokale lets capturen BEVOR Task.detached startet.
-        // So wird activeConfigs im detached Task NIE referenziert — kein MainActor-Isolation-Problem.
+        // Werte vor Task.detached kopieren, damit activeConfigs dort nie berührt wird.
         let capturedServerURL = serverURL
         let capturedTopic = topic
         let capturedAuth = authHeader(username: username, password: password, token: token)
@@ -701,8 +672,7 @@ final class NtfyService {
             var backoffSeconds: UInt64 = 1
             var attempt = 0
 
-            // Letzte Event-ID fuer since=<id>; ohne bekannte ID Fallback auf den
-            // Zeitpunkt der ersten erfolgreichen Verbindung (Unix-Sekunden).
+            // Letzte Event-ID für since=, sonst Zeitpunkt der ersten Verbindung.
             var lastEventId: String? = initialSince
             var fallbackSince: Int?
 
@@ -831,12 +801,10 @@ final class NtfyService {
                     attempt = 0
                 }
 
-                // Backoff-Sleep
                 attempt += 1
                 await self.updateSubscriptionState(key: key, generation: generation, state: .reconnecting(attempt: attempt))
                 try? await Task.sleep(for: .seconds(backoffSeconds))
 
-                // Exponentielles Erhoehen mit Cap
                 backoffSeconds = min(backoffSeconds * 2, SSEConfig.maxBackoffSeconds)
             }
         }
@@ -960,15 +928,12 @@ final class NtfyService {
     func reconnectAll() async {
         AppLog.network.info("🔌 Network: Reconnecting all \(self.activeConfigs.count, privacy: .public) subscriptions")
 
-        // Alle aktiven Tasks canceln
         for task in activeTasks.values {
             task.cancel()
         }
         activeTasks.removeAll()
 
-        // Sofort neu subscriben mit gespeicherten Configs
-        // reconnectAll() laeuft im @MainActor-Kontext, daher ist Zugriff auf activeConfigs sicher.
-        // subscribe() erstellt intern neue lokale Kopien fuer den Task.detached-Block.
+        // reconnectAll() läuft auf dem MainActor, der Zugriff auf activeConfigs ist sicher.
         for (_, config) in activeConfigs {
             subscribe(
                 serverURL: config.serverURL,
@@ -985,11 +950,7 @@ final class NtfyService {
 
     // MARK: - Delete Message
 
-    /// Löscht eine Nachricht vom Server (ntfy v2.16+)
-    /// - Parameters:
-    ///   - serverURL: Server URL
-    ///   - topic: Topic Name
-    ///   - sequenceId: Die Sequence-ID der Nachricht (X-Sequence-ID)
+    /// Löscht eine Nachricht vom Server (ntfy v2.16+).
     func deleteMessage(
         serverURL: String,
         topic: String,
@@ -1048,12 +1009,7 @@ final class NtfyService {
 
     // MARK: - Store Messages
 
-    /// Zentrale Methode fuer Insert/Upsert/Dedup/Delete-Check.
-    /// Verarbeitet alle zustandsrelevanten Events in der uebergebenen (chronologischen) Reihenfolge:
-    /// - `message`: Insert, Upsert per ID, oder Update per sequence_id (ersetzt die fruehere Version)
-    /// - `message_delete`: entfernt die Nachricht(en) der Sequenz aus DB und Mitteilungszentrale
-    /// - `message_clear`: markiert die Nachricht(en) der Sequenz als gelesen und entfernt die Mitteilung
-    /// Aufrufer sollten danach `writeWidgetData(context:)` aufrufen.
+    /// Wendet message, message_delete und message_clear in chronologischer Reihenfolge an; danach `writeWidgetData(context:)`.
     func storeMessages(
         for topic: Topic,
         messages: [NtfyMessage],
@@ -1062,8 +1018,7 @@ final class NtfyService {
         // Topic koennte inzwischen geloescht sein (z.B. Unsubscribe waehrend laufendem Refresh)
         guard !topic.isDeleted, topic.modelContext != nil else { return }
 
-        // Vorverarbeitung: Versionen, die im selben Batch noch ersetzt oder geloescht werden,
-        // gar nicht erst einfuegen (vermeidet Unread-Zaehler-Flackern bei jedem Poll).
+        // Im selben Batch ersetzte Versionen nicht einfügen, gegen flackernde Zähler.
         var lastMessageIndex: [String: Int] = [:]
         var lastDeleteIndex: [String: Int] = [:]
         for (index, event) in messages.enumerated() {
@@ -1114,12 +1069,11 @@ final class NtfyService {
     private func upsertMessage(_ message: NtfyMessage, into topic: Topic, context: ModelContext) -> Bool {
         let messageId = message.id
 
-        // 1. Check: existiert bereits?
         let existingPredicate = #Predicate<StoredMessage> { $0.messageId == messageId }
         let descriptor = FetchDescriptor(predicate: existingPredicate)
 
         if let existing = (try? context.fetch(descriptor))?.first(where: { !$0.isDeleted }) {
-            // UPSERT (SERV-02): Server hat Message mit bekannter ID erneut gesendet -> Update
+            // UPSERT: Server hat eine Message mit bekannter ID erneut gesendet
             existing.title = message.title
             existing.message = message.message
             existing.tags = message.tags
@@ -1191,7 +1145,6 @@ final class NtfyService {
             return true
         }
 
-        // 4. Insert
         let storedMessage = StoredMessage(from: message, topic: topic)
         context.insert(storedMessage)
         // Neue Messages sind immer ungelesen — denormalisierten Zaehler inkrementieren
@@ -1215,8 +1168,7 @@ final class NtfyService {
         return true
     }
 
-    /// `message_clear`: Nachricht(en) der Sequenz als gelesen markieren und Mitteilung entfernen.
-    /// Die Nachrichten selbst bleiben erhalten.
+    /// `message_clear`: als gelesen markieren und Mitteilung entfernen, die Nachrichten bleiben.
     private func applyClear(sequenceKey: String, in topic: Topic, context: ModelContext) -> Bool {
         let matches = storedMessages(matching: sequenceKey, in: topic, context: context)
         guard !matches.isEmpty else { return false }
@@ -1295,8 +1247,7 @@ final class NtfyService {
         }
     }
 
-    /// Loescht StoredMessages aelter als die konfigurierte Retention.
-    /// Dekrementiert topic.unreadCount fuer noch ungelesene Messages.
+    /// Löscht Nachrichten älter als die Retention und korrigiert unreadCount.
     func cleanupOldMessages(context: ModelContext) {
         let retentionDays = AppSettings.messageRetentionDays
         guard retentionDays != -1 else { return }
@@ -1323,10 +1274,7 @@ final class NtfyService {
 
     // MARK: - Refresh Topics
 
-    /// Fetcht Events fuer alle Topics PARALLEL via TaskGroup und wendet sie via storeMessages an
-    /// (inkl. message_delete/message_clear, damit Loeschungen auch beim Polling ankommen).
-    /// Ersetzt ContentView.refreshAllTopics() und TopicsView.refreshAllTopics().
-    /// Netzwerk-Requests laufen parallel, Ergebnisse werden sequentiell auf @MainActor gespeichert.
+    /// Holt Events aller Topics parallel und speichert sie nacheinander auf dem MainActor.
     func refreshTopics(
         _ topics: [Topic],
         context: ModelContext,
@@ -1338,7 +1286,6 @@ final class NtfyService {
         cleanupDeletedMessages(context: context)
         cleanupOldMessages(context: context)
 
-        // Sendable Struktur fuer Fetch-Ergebnisse
         struct FetchResult: Sendable {
             let serverURL: String
             let topicName: String
@@ -1348,7 +1295,7 @@ final class NtfyService {
         // Bereits geloeschte Topics nicht anfassen (Zugriff auf Properties wuerde crashen)
         let liveTopics = topics.filter { !$0.isDeleted && $0.modelContext != nil }
 
-        // Phase 1: Parallele Netzwerk-Requests — nur Sendable-Werte capturen
+        // Netzwerk-Requests parallel, nur Sendable-Werte capturen
         let results: [FetchResult] = await withTaskGroup(of: FetchResult?.self) { group in
             for topic in liveTopics {
                 let serverURL = topic.serverURL
@@ -1385,7 +1332,7 @@ final class NtfyService {
             return collected
         }
 
-        // Phase 2: Sequentielles Speichern auf @MainActor (ModelContext ist nicht thread-safe)
+        // Nacheinander auf dem MainActor speichern, ModelContext ist nicht thread-safe
         for result in results {
             // Topic koennte waehrend der Requests entfernt worden sein — erneut pruefen
             if let topic = liveTopics.first(where: {
@@ -1427,9 +1374,7 @@ final class NtfyService {
 
     // MARK: - Widget Data
 
-    /// Schreibt die letzten 10 ungelesenen Nachrichten aller Topics als JSON
-    /// in den App Group Container, damit das WidgetKit-Extension sie lesen kann.
-    /// Wird nach jedem storeMessages()-Aufruf aufgerufen.
+    /// Schreibt die letzten 10 ungelesenen Nachrichten für das Widget in die App Group.
     func writeWidgetData(context: ModelContext) {
         guard let containerURL = FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: "group.de.godsapp.ntfy"
@@ -1465,8 +1410,7 @@ final class NtfyService {
         // Tatsaechliche Anzahl ungelesener Nachrichten (nicht auf die 10 Eintraege begrenzt)
         let unreadCount = (try? context.fetchCount(FetchDescriptor<StoredMessage>(predicate: unreadPredicate))) ?? entries.count
 
-        // Format: { "unreadCount": Int, "messages": [...] } — das Widget liest auch das
-        // fruehere reine Array-Format
+        // Das Widget liest auch das frühere reine Array-Format.
         let payload: [String: Any] = [
             "unreadCount": max(unreadCount, entries.count),
             "messages": entries
@@ -1474,7 +1418,6 @@ final class NtfyService {
         guard let data = try? JSONSerialization.data(withJSONObject: payload) else { return }
         try? data.write(to: fileURL, options: .atomic)
 
-        // Widget-Timeline invalidieren
         WidgetCenter.shared.reloadAllTimelines()
         AppLog.network.info("✅ Widget: \(unreadCount, privacy: .public) ungelesen, \(entries.count, privacy: .public) Eintraege in widget_data.json geschrieben")
     }

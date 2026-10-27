@@ -2,20 +2,7 @@ import Foundation
 import Security
 
 // MARK: - SharedStore
-//
-// Zugriff der NotificationServiceExtension auf den mit der App geteilten
-// App-Group-Container. Die NSE kann keinen App-Code importieren (eigenes Target),
-// daher sind Keys und Formate hier bewusst dupliziert:
-// - `topicServers` (UserDefaults): [topicName: [serverURL]] — gepflegt von
-//   FirebaseService.subscribeToTopic/unsubscribeFromTopic in der App.
-// - `badge_count.txt`: aktueller Badge-Stand; die App schreibt den massgeblichen Wert
-//   bei jedem setBadgeCount, die NSE inkrementiert davon ausgehend.
-// - `mutedTopicKeys` / `mutedTopicNames` (UserDefaults): stummgeschaltete Topics als
-//   "<serverURL>|<name>" bzw. Namen, bei denen ALLE gleichnamigen Topics stumm sind —
-//   gepflegt von ContentView (MutedTopicsSync) in der App.
-// - `pending-messages/<id>.json`: von der NSE empfangene Nachrichten, die die App beim
-//   Aktivwerden in SwiftData importiert. Format:
-//   { "serverURL": String?, "message": { ntfy-JSON-Felder, kompatibel zu NtfyMessage } }
+// App-Group-Zugriff der NSE; Keys und Formate sind dupliziert, weil die NSE keinen App-Code importieren kann.
 
 enum SharedStore {
     static let appGroup = "group.de.godsapp.ntfy"
@@ -38,9 +25,7 @@ enum SharedStore {
 
     // MARK: Stummgeschaltete Topics
 
-    /// true, wenn das Topic in der App stummgeschaltet ist. Mit bekanntem Server wird
-    /// exakt (Server + Name) verglichen, sonst nur ueber den Namen — der gilt nur dann
-    /// als stumm, wenn alle gleichnamigen Topics stumm sind.
+    /// true, wenn das Topic stumm ist; ohne Server zählt der Name nur, wenn alle gleichnamigen Topics stumm sind.
     static func isMuted(topic: String, serverURL: String?) -> Bool {
         guard !topic.isEmpty, let defaults = UserDefaults(suiteName: appGroup) else { return false }
         if let serverURL {
@@ -74,10 +59,7 @@ enum SharedStore {
 
     // MARK: Pending Messages
 
-    /// Legt eine empfangene Nachricht fuer den Import durch die App ab.
-    /// - Parameters:
-    ///   - message: ntfy-Nachricht als JSON-Objekt (Felder wie in der ntfy JSON-API)
-    ///   - serverURL: Server, von dem die Nachricht stammt (nil = unbekannt/mehrdeutig)
+    /// Legt eine empfangene Nachricht für den Import durch die App ab.
     @discardableResult
     static func writePendingMessage(_ message: [String: Any], serverURL: String?) -> Bool {
         guard let id = message["id"] as? String, !id.isEmpty,
@@ -115,11 +97,7 @@ enum SharedStore {
 
 // MARK: - SharedKeychain
 
-/// Minimaler, rein lesender Keychain-Zugriff fuer die NSE.
-/// Muss exakt dasselbe Schema wie KeychainManager in der App verwenden:
-/// kSecClassGenericPassword, Service "de.godsapp.ntfy", Account "<serverURL>-token"
-/// bzw. "<serverURL>-username" / "<serverURL>-password", Access-Group
-/// "<TeamID>.de.godsapp.ntfy" (Prefix aus dem Info.plist-Key AppIdentifierPrefix).
+/// Lesender Keychain-Zugriff der NSE, mit exakt demselben Schema wie KeychainManager.
 enum SharedKeychain {
     private static let service = "de.godsapp.ntfy"
 
