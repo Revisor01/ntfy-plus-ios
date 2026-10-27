@@ -225,8 +225,8 @@ Erste Version.
 - Anzeige von App-Icons aus Nachrichten, Prioritäts-Badges, Dark Mode
 - Notification Service Extension für Badge-Zählung und Aufbereitung eingehender Pushes
 
-[Unreleased]: https://github.com/Revisor01/ntfy-plus-ios/compare/v2.2.0...HEAD
-[2.2.0]: https://github.com/Revisor01/ntfy-plus-ios/compare/v2.1.0...v2.2.0
-[2.1.0]: https://github.com/Revisor01/ntfy-plus-ios/compare/v2.0.0...v2.1.0
+[Unreleased]: https://github.com/Revisor01/ntfy-plus-ios/compare/2.2.0...HEAD
+[2.2.0]: https://github.com/Revisor01/ntfy-plus-ios/compare/2.1.0...2.2.0
+[2.1.0]: https://github.com/Revisor01/ntfy-plus-ios/compare/v2.0.0...2.1.0
 [2.0.0]: https://github.com/Revisor01/ntfy-plus-ios/compare/v1.0...v2.0.0
 [1.0.0]: https://github.com/Revisor01/ntfy-plus-ios/releases/tag/v1.0
