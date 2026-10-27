@@ -18,13 +18,10 @@ struct MessageRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: AppSpacing.sm) {
-            // App Icon (from notification) with priority badge
             messageIcon
 
             VStack(alignment: .leading, spacing: AppSpacing.xs) {
-                // Header
                 HStack {
-                    // Title or topic
                     if let title = message.title {
                         Text(title)
                             .font(AppFonts.headline)
@@ -37,12 +34,10 @@ struct MessageRow: View {
 
                     Spacer()
 
-                    // Time
                     Text(message.date.smartFormatted())
                         .font(AppFonts.caption)
                         .foregroundStyle(.secondary)
 
-                    // Starred indicator
                     if message.isStarred {
                         Image(systemName: "star.fill")
                             .font(.caption)
@@ -50,7 +45,6 @@ struct MessageRow: View {
                             .accessibilityLabel("Favorit")
                     }
 
-                    // Unread indicator
                     if !message.isRead {
                         Circle()
                             .fill(AppColors.primary)
@@ -59,7 +53,6 @@ struct MessageRow: View {
                     }
                 }
 
-                // Emoji tags
                 if !message.emojiTags.isEmpty {
                     HStack(spacing: AppSpacing.xxs) {
                         ForEach(message.emojiTags, id: \.self) { emoji in
@@ -69,9 +62,7 @@ struct MessageRow: View {
                     }
                 }
 
-                // Nachrichtentext: Markdown nur, wenn der Server die Nachricht als Markdown
-                // markiert hat (upstream-Verhalten). Aeltere Nachrichten ohne Kennzeichen
-                // (isMarkdown == nil) bleiben wie bisher Markdown-formatiert.
+                // Markdown nur mit Server-Kennzeichen; ältere Nachrichten ohne Kennzeichen bleiben Markdown.
                 if let messageText = message.message, !messageText.isEmpty {
                     Text(message.isMarkdown == false ? AttributedString(messageText) : parseMarkdown(messageText))
                         .font(AppFonts.body)
@@ -81,12 +72,10 @@ struct MessageRow: View {
                         .tint(AppColors.primary)
                 }
 
-                // Attachment
                 if let attachment = message.attachment, let url = attachment.url {
                     attachmentView(attachment: attachment, url: url)
                 }
 
-                // Click URL
                 if let clickURL = message.clickURL, clickURL.isValidURL {
                     Button {
                         openURL(clickURL)
@@ -102,14 +91,11 @@ struct MessageRow: View {
                     .buttonStyle(.plain)
                 }
 
-                // Action buttons from ntfy
                 if let actions = message.actions, !actions.isEmpty {
                     actionButtonsView(actions: actions)
                 }
 
-                // Actions row
                 HStack(spacing: AppSpacing.md) {
-                    // Copy button
                     Button {
                         copyMessage()
                     } label: {
@@ -119,8 +105,7 @@ struct MessageRow: View {
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Nachricht kopieren")
 
-                    // Share button — ShareLink statt UIActivityViewController:
-                    // SwiftUI kuemmert sich um den Popover-Anker (sonst Crash auf dem iPad)
+                    // ShareLink statt UIActivityViewController, sonst Crash ohne Popover-Anker auf dem iPad.
                     ShareLink(item: shareText) {
                         Image(systemName: AppIcons.share)
                     }
@@ -130,7 +115,6 @@ struct MessageRow: View {
 
                     Spacer()
 
-                    // Full timestamp on tap
                     Text(message.date.formatted())
                         .font(AppFonts.caption2)
                         .foregroundStyle(.tertiary)
@@ -175,8 +159,7 @@ struct MessageRow: View {
                 }
             }
         }
-        // Alle Links in der Zeile (v.a. Markdown-Links im Nachrichtentext) laufen
-        // ueber diese Aktion — nur http/https werden geoeffnet, alles andere verworfen.
+        // Alle Links der Zeile laufen hierüber, nur http(s) wird geöffnet.
         .environment(\.openURL, OpenURLAction { url in
             if url.isSafeWebURL {
                 return .systemAction
@@ -221,13 +204,11 @@ struct MessageRow: View {
         let priority = message.priorityLevel
 
         ZStack(alignment: .topTrailing) {
-            // Main icon
             if let iconURL = message.iconURL {
                 CachedAsyncImage(url: iconURL, placeholder: "app.badge", useDiskCache: true)
                     .frame(width: 44, height: 44)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             } else {
-                // Priority-based fallback icon
                 ZStack {
                     RoundedRectangle(cornerRadius: 10)
                         .fill(AppColors.priority(priority).opacity(0.15))
@@ -265,8 +246,7 @@ struct MessageRow: View {
 
     @ViewBuilder
     private func attachmentView(attachment: StoredAttachment, url: String) -> some View {
-        // Ablauf vor dem Laden pruefen (ntfy `attachment.expires` bzw. signierte URL),
-        // statt eine garantiert fehlschlagende Anfrage zu starten
+        // Ablauf vorher prüfen statt eine sicher scheiternde Anfrage zu starten.
         let expiry = attachmentExpiry(attachment: attachment, url: url)
         if let expiry, expiry <= Date() {
             expiredAttachmentPlaceholder(attachment: attachment)
@@ -474,7 +454,6 @@ struct MessageRow: View {
     private func executeAction(_ action: StoredAction) {
         switch action.action {
         case "view":
-            // Open URL in browser
             if let urlString = action.url {
                 openURL(urlString)
             }
@@ -512,7 +491,6 @@ struct MessageRow: View {
             clearAfterAction()
         }
 
-        // Haptic feedback
         if AppSettings.hapticFeedback {
             let generator = UIImpactFeedbackGenerator(style: .medium)
             generator.impactOccurred()
@@ -561,7 +539,6 @@ struct MessageRow: View {
         request.httpMethod = method
         request.timeoutInterval = 30
 
-        // Add headers
         if let headers = action.headers {
             for (key, value) in headers {
                 request.setValue(value, forHTTPHeaderField: key)
@@ -611,8 +588,7 @@ struct MessageRow: View {
         showingHTTPActionError = true
     }
 
-    /// ntfy-Action `clear: true`: Nachricht als gelesen markieren, Zaehler/Badge/Widget
-    /// aktualisieren und die zugestellte Mitteilung entfernen.
+    /// ntfy-Action `clear: true`: als gelesen markieren und Mitteilung entfernen.
     private func clearAfterAction() {
         // Nachricht koennte waehrend einer laufenden HTTP-Aktion geloescht worden sein
         guard !message.isDeleted, message.modelContext != nil else { return }
@@ -665,7 +641,6 @@ struct MessageRow: View {
     private func copyMessage() {
         UIPasteboard.general.string = copyText
 
-        // Haptic feedback
         if AppSettings.hapticFeedback {
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)

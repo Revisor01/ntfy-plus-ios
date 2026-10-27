@@ -3,8 +3,7 @@ import Foundation
 import FirebaseMessaging
 #endif
 
-/// Service to manage Firebase Cloud Messaging topic subscriptions
-/// ntfy server sends to FCM topics using plain topic names
+/// Verwaltet die FCM-Topic-Abos; ntfy sendet an den unveränderten Topic-Namen.
 @MainActor
 final class FirebaseService {
     static let shared = FirebaseService()
@@ -24,7 +23,6 @@ final class FirebaseService {
         }
         #endif
 
-        // Listen for APNs token received notification
         NotificationCenter.default.addObserver(
             forName: .apnsTokenReceived,
             object: nil,
@@ -41,20 +39,15 @@ final class FirebaseService {
         AppLog.firebase.info("APNs token received - processing \(self.pendingSubscriptions.count, privacy: .public) pending FCM subscriptions")
         isReady = true
 
-        // Process all pending subscriptions
         for pending in pendingSubscriptions {
             performSubscription(serverURL: pending.serverURL, topic: pending.topic)
         }
         pendingSubscriptions.removeAll()
     }
 
-    /// Subscribe to a ntfy topic via Firebase
-    /// - Parameters:
-    ///   - serverURL: The ntfy server URL (e.g., "https://ntfy.sh")
-    ///   - topic: The topic name (e.g., "mytopic")
+    /// Abonniert ein ntfy-Topic über Firebase.
     func subscribeToTopic(serverURL: String, topic: String) {
-        // Topic→Server-Map sofort pflegen (auch wenn die FCM-Subscription noch wartet),
-        // damit die NotificationServiceExtension poll_requests dem Server zuordnen kann.
+        // Map sofort pflegen, damit die NSE poll_requests dem Server zuordnen kann.
         TopicServerMap.add(serverURL: serverURL, topic: topic)
 
         #if canImport(FirebaseMessaging)
@@ -77,8 +70,7 @@ final class FirebaseService {
     /// Actually perform the FCM subscription
     private func performSubscription(serverURL: String, topic: String) {
         #if canImport(FirebaseMessaging)
-        // ntfy server sends to FCM topic using the plain topic name (not hashed)
-        // So we subscribe directly to the topic name
+        // ntfy sendet an den unveränderten Topic-Namen.
         let fcmTopic = topic
 
         AppLog.firebase.info("🔔 Subscribing to FCM topic: '\(fcmTopic, privacy: .private)' (APNs token: \(Messaging.messaging().apnsToken != nil ? "✓" : "✗", privacy: .public))")
@@ -95,16 +87,12 @@ final class FirebaseService {
         #endif
     }
 
-    /// Unsubscribe from a ntfy topic via Firebase
-    /// - Parameters:
-    ///   - serverURL: The ntfy server URL
-    ///   - topic: The topic name
+    /// Meldet ein ntfy-Topic bei Firebase ab.
     func unsubscribeFromTopic(serverURL: String, topic: String) {
         // Noch wartende Subscription fuer genau diesen Server verwerfen
         pendingSubscriptions.removeAll { $0.serverURL == serverURL && $0.topic == topic }
 
-        // Refcount: FCM kennt nur den Topic-Namen. Abonniert ein anderer Server noch
-        // denselben Namen, darf die FCM-Subscription nicht entfernt werden.
+        // FCM kennt nur den Namen: nutzt ein anderer Server ihn noch, bleibt das Abo.
         let remainingServers = TopicServerMap.remove(serverURL: serverURL, topic: topic)
         guard remainingServers.isEmpty else {
             AppLog.firebase.info("FCM topic \(topic, privacy: .private) bleibt abonniert — noch \(remainingServers.count, privacy: .public) weitere(r) Server")
@@ -112,7 +100,6 @@ final class FirebaseService {
         }
 
         #if canImport(FirebaseMessaging)
-        // Use plain topic name to match subscription
         let fcmTopic = topic
 
         Messaging.messaging().unsubscribe(fromTopic: fcmTopic) { error in
@@ -144,11 +131,7 @@ final class FirebaseService {
 
 // MARK: - Topic→Server-Map (App Group)
 
-/// Ordnet FCM-Topic-Namen den ntfy-Servern zu, auf denen das Topic abonniert ist.
-/// Liegt in den App-Group-UserDefaults, damit die NotificationServiceExtension
-/// (eigenes Target, kein SwiftData-Zugriff) bei poll_request-Pushes den Server
-/// ermitteln kann. Ein Topic-Name kann auf mehreren Servern existieren.
-/// Format: `topicServers` = [topicName: [serverURL]] — die NSE liest denselben Key.
+/// Topic-Name zu Servern in der App Group, damit die NSE bei poll_request den Server findet.
 enum TopicServerMap {
     static let suiteName = "group.de.godsapp.ntfy"
     static let key = "topicServers"

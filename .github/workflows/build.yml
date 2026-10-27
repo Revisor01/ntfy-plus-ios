@@ -1,8 +1,6 @@
 name: Build
 
-# Baut die App für jeden PR und führt die Unit-Tests auf einem Simulator aus.
-# GoogleService-Info.plist ist nicht im Repo; für den Build reicht ein Platzhalter.
-# Der Job-Name bleibt, weil der Branch-Schutz den Check unter diesem Namen verlangt.
+# Baut die App für jeden PR und führt die Unit-Tests aus; der Job-Name ist Pflicht-Check im Branch-Schutz.
 
 on:
   push:
@@ -31,8 +29,7 @@ jobs:
       runner: xcode-27
       xcode: vorgabe
       ohne-signierung: true
-      # Firebase prüft die Form des API-Keys beim Start (39 Zeichen, beginnt mit A);
-      # sonst stürzt die App als Test-Host ab.
+      # Firebase prüft die Form des API-Keys beim Start, sonst stürzt der Test-Host ab.
       vorbereitung: |
         cat > ntfy/GoogleService-Info.plist <<'PLIST'
         <?xml version="1.0" encoding="UTF-8"?>
@@ -52,6 +49,5 @@ jobs:
         </dict>
         </plist>
         PLIST
-      # Aufgelöste Paketversionen, damit Package.resolved ohne lokalen Mac
-      # aktualisiert werden kann.
+      # Damit Package.resolved ohne lokalen Mac aktualisiert werden kann.
       artefakt: ntfy-ios.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved

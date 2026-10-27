@@ -1,8 +1,7 @@
 import Foundation
 import Testing
 
-// Ohne deutsche Grundsprache hält iOS die App für englisch: Datumsauswahl und
-// Systemknöpfe erscheinen englisch, der App Store nennt Englisch (27.10.2026).
+// Ohne deutsche Grundsprache zeigt iOS Systemknöpfe englisch an (geprüft 27.10.2026).
 @Suite("Sprache der App")
 struct SpracheTests {
 

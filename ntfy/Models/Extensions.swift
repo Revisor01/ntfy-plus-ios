@@ -3,11 +3,7 @@ import SwiftData
 
 // MARK: - Date Extensions
 
-/// Zwischengespeicherte Formatter — das Erzeugen eines DateFormatter ist teuer und
-/// wurde bisher bei jedem Zeilen-Render (TopicRow/MessageRow) wiederholt.
-/// DateFormatter, RelativeDateTimeFormatter und ISO8601DateFormatter sind seit iOS 7
-/// thread-safe beim Formatieren/Parsen; die Instanzen werden nach der Konfiguration
-/// nie mehr veraendert, daher ist `nonisolated(unsafe)` hier unbedenklich.
+/// Zwischengespeicherte Formatter; sie sind beim Formatieren thread-safe und werden nie verändert.
 enum CachedFormatters {
     nonisolated(unsafe) static let relative: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
@@ -87,9 +83,7 @@ extension Date {
 // MARK: - String Extensions
 
 extension String {
-    /// true fuer http(s)-URLs mit nicht-leerem Host und ohne Leerzeichen.
-    /// Fuehrende/abschliessende Leerzeichen werden ignoriert (Eingaben werden vor
-    /// der Verwendung ohnehin getrimmt).
+    /// true für http(s)-URLs mit Host und ohne Leerzeichen.
     var isValidURL: Bool {
         let candidate = trimmingCharacters(in: .whitespacesAndNewlines)
         guard !candidate.isEmpty,
@@ -104,8 +98,7 @@ extension String {
         return true
     }
 
-    /// Gueltiger ntfy-Topic-Name: 1–64 Zeichen aus A–Z, a–z, 0–9, "-" und "_".
-    /// (Entspricht der Server-Regel `^[-_A-Za-z0-9]{1,64}$`.)
+    /// Gültiger Topic-Name nach der Server-Regel `^[-_A-Za-z0-9]{1,64}$`.
     var isValidNtfyTopicName: Bool {
         let byteCount = utf8.count
         guard byteCount >= 1 && byteCount <= 64 else { return false }
@@ -132,10 +125,7 @@ extension String {
         !isEmpty
     }
 
-    /// Normalisiert eine Server-URL: trimmt Whitespace, fügt optional https:// hinzu,
-    /// und entfernt abschließende Slashes.
-    /// - Parameter addProtocolIfMissing: true für Neu-Eingaben ohne Protokoll (Onboarding),
-    ///   false für bereits validierte URLs aus bestehenden Server-Objekten.
+    /// Normalisiert eine Server-URL; `addProtocolIfMissing` ergänzt https:// für Neu-Eingaben.
     func normalizedServerURL(addProtocolIfMissing: Bool = true) -> String {
         var result = self.trimmingCharacters(in: .whitespacesAndNewlines)
         if addProtocolIfMissing {
@@ -274,8 +264,7 @@ extension Optional where Wrapped == String {
 // MARK: - URL Extensions
 
 extension URL {
-    /// Nur sichere Web-Schemes (http/https) — verhindert javascript:/data:/file:/tel:
-    /// usw. aus fremden Nachrichten (Markdown-Links, Klick-URLs, Anhaenge).
+    /// Nur http und https, keine javascript:/data:/file:-Links aus fremden Nachrichten.
     var isSafeWebURL: Bool {
         guard let scheme = scheme?.lowercased() else { return false }
         return scheme == "http" || scheme == "https"
@@ -289,8 +278,7 @@ extension URL {
         }
     }
 
-    /// Parst ablauf-relevante Query-Parameter aus signierten URLs.
-    /// Unterstützt: AWS S3 (Expires/X-Amz-Expires+X-Amz-Date), Azure SAS (se=), generisch (Expires=).
+    /// Ablaufzeit aus signierten URLs (S3, Azure SAS, generisch Expires=).
     var expiryDate: Date? {
         guard let params = queryParameters else { return nil }
 
@@ -334,8 +322,7 @@ extension Binding where Value == String {
 
 // MARK: - Topic-/Badge-Helfer
 
-/// Gemeinsame Schritte fuer Views, die Topics entfernen oder Gelesen-Status aendern
-/// (TopicsView, MessagesView, SettingsView) — damit alle Pfade identisch aufraeumen.
+/// Gemeinsamer Aufräumpfad für Views, die Topics entfernen oder Gelesen-Status ändern.
 @MainActor
 enum TopicActions {
     /// Setzt das App-Badge auf die Anzahl ungelesener Nachrichten ueber alle Topics.
@@ -358,31 +345,24 @@ enum TopicActions {
         }
     }
 
-    /// Entfernt ein Topic vollstaendig: SSE- und FCM-Abo beenden, zugestellte
-    /// Benachrichtigungen entfernen, Nachrichten + DeletedMessage-Records loeschen,
-    /// Topic loeschen, speichern, Badge und Widget aktualisieren.
-    /// Nach dem Aufruf darf auf `topic` nicht mehr zugegriffen werden.
+    /// Entfernt ein Topic samt Abos, Mitteilungen und Nachrichten; danach `topic` nicht mehr anfassen.
     static func remove(_ topic: Topic, context: ModelContext, ntfyService: NtfyService) {
         // Alle benoetigten Werte kopieren, BEVOR das Model geloescht wird
         let topicId = topic.id
         let topicName = topic.name
         let serverURL = topic.serverURL
 
-        // SSE-Abo beenden
         ntfyService.unsubscribe(serverURL: serverURL, topic: topicName)
 
-        // FCM-Abo immer ueber FirebaseService abmelden: der pflegt die Topic→Server-Map
-        // und meldet das FCM-Topic erst ab, wenn kein anderer Server denselben Namen nutzt.
+        // Über FirebaseService abmelden, der den Refcount gleichnamiger Topics pflegt.
         FirebaseService.shared.unsubscribeFromTopic(serverURL: serverURL, topic: topicName)
 
-        // Gruppierte Mitteilungen (threadIdentifier = Name) nur entfernen, wenn kein
-        // anderes Topic gleichen Namens (auf einem anderen Server) uebrig bleibt.
+        // Gruppierte Mitteilungen nur entfernen, wenn kein gleichnamiges Topic übrig bleibt.
         let sameNamePredicate = #Predicate<Topic> { other in
             other.name == topicName && other.id != topicId
         }
         let sameNameCount = (try? context.fetchCount(FetchDescriptor<Topic>(predicate: sameNamePredicate))) ?? 0
 
-        // Nachrichten des Topics loeschen (inkl. zugehoeriger Benachrichtigungen)
         let messagePredicate = #Predicate<StoredMessage> { message in
             message.topic?.id == topicId
         }
@@ -392,7 +372,6 @@ enum TopicActions {
             context.delete(message)
         }
 
-        // DeletedMessage-Records des Topics loeschen
         let deletedPredicate = #Predicate<DeletedMessage> { deleted in
             deleted.topicName == topicName && deleted.serverURL == serverURL
         }
@@ -401,14 +380,12 @@ enum TopicActions {
             context.delete(record)
         }
 
-        // Topic selbst loeschen
         context.delete(topic)
         try? context.save()
 
         ntfyService.writeWidgetData(context: context)
 
         Task {
-            // Gruppierte Benachrichtigungen (threadIdentifier = Topic-Name) entfernen
             if sameNameCount == 0 {
                 await NotificationService.shared.removeNotifications(forTopic: topicName)
             }

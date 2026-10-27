@@ -45,7 +45,6 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            // Background gradient
             LinearGradient(
                 colors: backgroundColors,
                 startPoint: .top,
@@ -54,7 +53,6 @@ struct OnboardingView: View {
             .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Content
                 TabView(selection: $currentPage) {
                     welcomePage.tag(0)
                     serverSetupPage.tag(1)
@@ -63,7 +61,6 @@ struct OnboardingView: View {
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(.easeInOut, value: currentPage)
 
-                // Custom page indicator
                 pageIndicator
                     .padding(.bottom, 20)
             }
@@ -89,7 +86,6 @@ struct OnboardingView: View {
         VStack(spacing: 0) {
             Spacer()
 
-            // App Icon
             Image("AppIconImage")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
@@ -111,7 +107,6 @@ struct OnboardingView: View {
 
             Spacer()
 
-            // Features
             VStack(spacing: 16) {
                 featureCard(
                     icon: "server.rack",
@@ -133,7 +128,6 @@ struct OnboardingView: View {
 
             Spacer()
 
-            // Button
             Button {
                 withAnimation(.spring(response: 0.4)) {
                     currentPage = 1
@@ -209,7 +203,6 @@ struct OnboardingView: View {
             Spacer()
 
             VStack(spacing: 16) {
-                // Server URL Input
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Server URL")
                         .font(.headline)
@@ -235,7 +228,6 @@ struct OnboardingView: View {
                     }
                 }
 
-                // Auth Toggle
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Authentifizierung")
@@ -258,7 +250,6 @@ struct OnboardingView: View {
 
             Spacer()
 
-            // Buttons
             HStack(spacing: 12) {
                 Button {
                     withAnimation(.spring(response: 0.4)) {
@@ -326,7 +317,6 @@ struct OnboardingView: View {
             Spacer()
 
             VStack(spacing: 16) {
-                // Method Picker
                 Picker("Methode", selection: $useToken) {
                     Text("Benutzername").tag(false)
                     Text("Token").tag(true)
@@ -388,7 +378,6 @@ struct OnboardingView: View {
                     }
                 }
 
-                // Status messages
                 if let error = connectionError {
                     HStack {
                         Image(systemName: "exclamationmark.triangle.fill")
@@ -419,7 +408,6 @@ struct OnboardingView: View {
 
             Spacer()
 
-            // Buttons
             HStack(spacing: 12) {
                 Button {
                     withAnimation(.spring(response: 0.4)) {
@@ -553,8 +541,7 @@ struct OnboardingView: View {
             }
         }
 
-        // Existiert der Server bereits (z.B. nach DB-Reset), ihn wiederverwenden
-        // statt einen zweiten Standard-Server anzulegen
+        // Vorhandenen Server wiederverwenden statt einen zweiten anzulegen.
         let existingServers = (try? modelContext.fetch(FetchDescriptor<Server>())) ?? []
         let targetServer: Server
         if let existing = existingServers.first(where: { $0.url == normalizedURL }) {

@@ -2,12 +2,7 @@ import Foundation
 import UserNotifications
 
 // MARK: - PushPayload
-//
-// Liest die FCM-Data-Felder, die der ntfy-Server in den APNs-Payload legt
-// (alle Werte als String, siehe ntfy server/server_firebase.go):
-// id, time, event, topic, sequence_id, priority, tags (kommagetrennt), click, icon,
-// title, message, content_type, encoding, actions (JSON-String),
-// attachment_name/_type/_size/_expires/_url, poll_id, truncated.
+// Liest die FCM-Data-Felder, die der ntfy-Server als Strings in den APNs-Payload legt (server_firebase.go).
 
 struct PushPayload {
     let userInfo: [AnyHashable: Any]
@@ -39,8 +34,7 @@ struct PushPayload {
         return value
     }
 
-    /// Baut aus einem normalen "message"-Push ein ntfy-JSON-Objekt,
-    /// das die App als NtfyMessage dekodieren kann.
+    /// Baut aus einem "message"-Push ein ntfy-JSON-Objekt, das die App als NtfyMessage dekodiert.
     func messageDictionary() -> [String: Any]? {
         guard event == "message", let id = self.id, !topic.isEmpty else { return nil }
 
@@ -76,8 +70,7 @@ struct PushPayload {
         if let actionsString = nonEmpty("actions"),
            let data = actionsString.data(using: .utf8),
            let rawActions = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] {
-            // Nur Actions mit den Pflichtfeldern der App (action, label) uebernehmen —
-            // sonst scheitert das Dekodieren der ganzen Nachricht in der App.
+            // Nur Actions mit action und label, sonst scheitert das Dekodieren der ganzen Nachricht.
             let actions = rawActions.filter { $0["action"] is String && $0["label"] is String }
             if !actions.isEmpty {
                 dict["actions"] = actions
@@ -100,10 +93,7 @@ struct PushPayload {
 // MARK: - Priority → Darstellung
 
 enum PriorityStyle {
-    /// Uebertraegt die ntfy-Prioritaet (1–5) auf Interruption-Level, Relevanz und Sound —
-    /// analog zur bisherigen lokalen Notification-Logik der App:
-    /// 1 = passiv/lautlos, 2–4 = aktiv mit Standard-Sound, 5 = time-sensitive.
-    /// Critical Alerts werden bewusst nicht verwendet (kein Entitlement).
+    /// Überträgt die Priorität auf Interruption-Level und Ton: 1 lautlos, 2–4 Standard, 5 time-sensitive.
     static func apply(priority: Int?, to content: UNMutableNotificationContent) {
         let level = priority ?? 3
         switch level {
@@ -129,8 +119,7 @@ enum PriorityStyle {
         }
     }
 
-    /// In der App stummgeschaltetes Topic: still zustellen (kein Ton, passiv).
-    /// Muss nach `apply(priority:to:)` aufgerufen werden, das den Ton sonst wieder setzt.
+    /// Stummes Topic still zustellen; nach `apply(priority:to:)` aufrufen, das den Ton sonst wieder setzt.
     static func applyMuted(to content: UNMutableNotificationContent) {
         content.sound = nil
         content.interruptionLevel = .passive

@@ -1,9 +1,6 @@
 name: iOS Release Build
 
-# Baut das Release in Xcode Cloud (Workflow „ntfy+ TestFlight“) und wartet
-# darauf; der Build landet in TestFlight. Die Firebase-Datei bekommt Xcode Cloud
-# aus seiner geheimen Umgebungsvariable (ci_scripts/ci_post_clone.sh). Die
-# Workflow-ID steht in der Repo-Variable XCODE_CLOUD_WORKFLOW.
+# Baut das Release in Xcode Cloud (Workflow-ID in XCODE_CLOUD_WORKFLOW) und wartet auf TestFlight.
 
 on:
   workflow_dispatch:

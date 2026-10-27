@@ -73,7 +73,6 @@ struct EditTopicView: View {
 
     @ViewBuilder
     private var formTopSections: some View {
-        // Preview
         Section {
             HStack {
                 Spacer()
@@ -83,14 +82,12 @@ struct EditTopicView: View {
             .listRowBackground(Color.clear)
         }
 
-        // Message Icon Toggle
         Section {
             Toggle("Icon aus Nachricht verwenden", isOn: $useMessageIcon)
         } footer: {
             Text("Wenn aktiviert, wird das Icon der letzten Nachricht (z.B. Sonarr-Logo) angezeigt, falls vorhanden.")
         }
 
-        // Custom Letter
         Section("Buchstabe") {
             TextField("Buchstabe (leer = erster Buchstabe)", text: $customLetter)
                 .textInputAutocapitalization(.characters)
@@ -144,7 +141,6 @@ struct EditTopicView: View {
     private var iconSection: some View {
         Section("Icon (optional)") {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
-                // No icon option
                 Button {
                     selectedIcon = nil
                 } label: {
@@ -198,7 +194,6 @@ struct EditTopicView: View {
     @ViewBuilder
     private var notificationsSection: some View {
         Section {
-            // Standard-Priorität Picker
             Picker("Standard-Priorität", selection: $selectedDefaultPriority) {
                 ForEach(Priority.allCases, id: \.rawValue) { priority in
                     Label(priority.name, systemImage: priority.icon)

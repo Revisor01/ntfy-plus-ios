@@ -19,13 +19,9 @@
 
 ## Worum es geht
 
-ntfy ist ein einfacher Dienst für Push-Benachrichtigungen: Ein Skript, ein
-Server oder ein Smart Home schickt eine Nachricht per HTTP an ein Topic, und
-jedes Gerät, das dieses Topic abonniert hat, bekommt sie.
-
-ntfy+ ist eine eigene iPhone-App dafür, mit eigenem Server oder ntfy.sh. Topics
-lassen sich gestalten, Nachrichten auch selbst senden, und geschützte Topics
-funktionieren mit Benutzername und Passwort oder Access Token.
+ntfy stellt Nachrichten, die ein Skript oder Server per HTTP an ein Topic
+schickt, allen Geräten zu, die es abonniert haben. ntfy+ ist eine iPhone-App
+dafür, mit eigenem Server oder ntfy.sh.
 
 ## Funktionen
 
@@ -57,9 +53,7 @@ Anmeldung und das erste Topic.
 
 ## Versionen
 
-Was sich wann geändert hat, steht in [CHANGELOG.md](CHANGELOG.md) — nach
-[Keep a Changelog](https://keepachangelog.com/de/1.1.0/), aus Sicht der
-Nutzer:innen geschrieben. Die
+Was sich wann geändert hat, steht in [CHANGELOG.md](CHANGELOG.md). Die
 [Releases](https://github.com/Revisor01/ntfy-plus-ios/releases) fassen jede
 Version zusammen.
 

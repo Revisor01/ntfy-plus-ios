@@ -8,27 +8,21 @@ import FirebaseMessaging
 
 class AppDelegate: NSObject, UIApplicationDelegate {
 
-    /// Topic aus einem Mitteilungs-Tap, das noch keine UI angesteuert hat (Kaltstart:
-    /// `.navigateToTopic` wird gepostet, bevor ContentView existiert). ContentView
-    /// uebernimmt und leert es — bei aktiver Sperre erst nach der Entsperrung.
+    /// Topic aus einem Mitteilungs-Tap beim Kaltstart; ContentView übernimmt es, bei Sperre erst nach dem Entsperren.
     @MainActor static var pendingNotificationTopic: String?
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
 
         #if canImport(FirebaseCore)
-        // Configure Firebase
         FirebaseApp.configure()
 
-        // Set messaging delegate
         Messaging.messaging().delegate = self
         #endif
 
-        // Set notification delegate
         UNUserNotificationCenter.current().delegate = self
 
-        // Request notification authorization — einziger automatischer Aufruf beim Start
-        // (ContentView fragt nicht mehr zusaetzlich; SettingsView nur auf Nutzeraktion)
+        // Einziger automatischer Aufruf beim Start; SettingsView fragt nur auf Nutzeraktion.
         Task { @MainActor in
             let granted = await NotificationService.shared.requestAuthorization()
             if granted {
@@ -36,7 +30,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
             }
         }
 
-        // Register for remote notifications
         application.registerForRemoteNotifications()
 
         return true
@@ -47,14 +40,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         #if canImport(FirebaseMessaging)
-        // Pass device token to Firebase
         Messaging.messaging().apnsToken = deviceToken
         #endif
 
         let tokenString = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
         AppLog.app.info("APNs Device Token: \(tokenString, privacy: .private)")
 
-        // Notify FirebaseService that APNs token is available
         NotificationCenter.default.post(name: .apnsTokenReceived, object: nil)
     }
 
@@ -71,11 +62,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
         AppLog.app.info("📬 Received remote notification (background fetch)")
 
-        // The NotificationServiceExtension already handles the push notification
-        // and removes the subtitle. This method is called for background fetch
-        // but we don't need to create additional notifications.
+        // Die NSE stellt die Mitteilung schon zu; hier keine zusätzliche.
 
-        // Just acknowledge receipt
         completionHandler(.newData)
     }
 
@@ -83,8 +71,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
 // MARK: - UNUserNotificationCenterDelegate
 extension AppDelegate: UNUserNotificationCenterDelegate {
-    // Show notification when app is in foreground
-    // NotificationServiceExtension already removed the subtitle, so just show it
+    // Mitteilung auch im Vordergrund zeigen.
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             willPresent notification: UNNotification,
                                             withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
@@ -95,11 +82,9 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
             }
         }
 
-        // Show the notification as-is (subtitle already removed by extension)
         completionHandler([.banner, .sound, .badge])
     }
 
-    // Handle notification tap and actions
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                             didReceive response: UNNotificationResponse,
                                             withCompletionHandler completionHandler: @escaping () -> Void) {
@@ -139,8 +124,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
             }
 
         case "OPEN_URL":
-            // URL aus userInfo["url"] lesen (ntfy action-spezifisches Feld)
-            // Fallback auf userInfo["click"] falls kein "url"-Key vorhanden
+            // userInfo["url"] der Action, sonst userInfo["click"]
             let urlString = (userInfo["url"] as? String) ?? clickString
             if let url = AppDelegate.safeWebURL(from: urlString) {
                 AppLog.app.info("🔗 OPEN_URL action: \(url.absoluteString, privacy: .private)")
@@ -151,8 +135,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
             completion.call()
 
         default:
-            // Normal tap (UNNotificationDefaultActionIdentifier) — open app and navigate
-            // Handle click URL if present (ntfy v2.16+)
+            // Normaler Tap: App öffnen und navigieren, Klick-URL beachten.
             if let clickURL = AppDelegate.safeWebURL(from: clickString) {
                 AppLog.app.info("🔗 Opening click URL: \(clickURL.absoluteString, privacy: .private)")
                 Task { @MainActor in
@@ -160,11 +143,9 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
                 }
             }
 
-            // Navigate to topic if available
             if let topic = topicName {
                 Task { @MainActor in
-                    // Beim Kaltstart existiert ContentView noch nicht und verpasst die
-                    // Notification — Ziel puffern; ContentView uebernimmt es beim Erscheinen
+                    // Beim Kaltstart gibt es ContentView noch nicht, daher Ziel puffern.
                     AppDelegate.pendingNotificationTopic = topic
                     NotificationCenter.default.post(
                         name: .navigateToTopic,
@@ -181,8 +162,7 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
 // MARK: - Notification Action Handling
 
 extension AppDelegate {
-    /// Nur sichere Web-Schemes oeffnen (gleiche Regel wie MessageRow.openURL) —
-    /// verhindert javascript:/data:/file:/Custom-Schemes aus fremden Nachrichten.
+    /// Nur http(s) öffnen, keine javascript:/data:/file:-Schemes aus fremden Nachrichten.
     nonisolated static func safeWebURL(from string: String?) -> URL? {
         guard let string = string, !string.isEmpty else { return nil }
         guard let url = URL(string: string),
@@ -194,8 +174,7 @@ extension AppDelegate {
         return url
     }
 
-    /// MARK_READ: SwiftData direkt aktualisieren (funktioniert auch, wenn die UI nicht
-    /// geladen ist), danach Badge aus den ungelesenen Nachrichten neu setzen.
+    /// MARK_READ direkt in SwiftData, damit es auch ohne geladene UI wirkt.
     @MainActor
     static func markMessageRead(messageId: String?, notificationIdentifier: String) async {
         NotificationService.shared.removeNotification(withIdentifier: notificationIdentifier)
@@ -232,9 +211,7 @@ extension AppDelegate {
         await NotificationService.shared.syncBadgeWithUnreadCount(context: context)
     }
 
-    /// REPLY: an den Server des Topics (nicht den Default-Server) mit dessen
-    /// Zugangsdaten publizieren. Laeuft in einem Background-Task; Fehler werden
-    /// geloggt und per lokaler Notification gemeldet.
+    /// REPLY an den Server des Topics mit dessen Zugangsdaten, im Background-Task.
     @MainActor
     static func sendReply(text: String, topicName: String, serverURLHint: String?) async {
         let backgroundTask = BackgroundTaskToken()
@@ -265,8 +242,7 @@ extension AppDelegate {
         }
     }
 
-    /// Server des Topics: userInfo["serverURL"] (von der NSE gesetzt) → eindeutige
-    /// Topic→Server-Map → SwiftData-Topic → erster Map-Eintrag → Default-Server.
+    /// Server des Topics: userInfo, Topic-Map, SwiftData, erster Map-Eintrag, Default-Server.
     @MainActor
     private static func resolveServerURL(topicName: String, hint: String?) -> String {
         if let hint = hint, !hint.isEmpty {
@@ -310,8 +286,7 @@ extension AppDelegate {
     }
 }
 
-/// Reicht den nicht-Sendable completionHandler der Delegate-Methode in MainActor-Tasks
-/// weiter. UIKit erlaubt den Aufruf von beliebigen Threads; hier erfolgt er auf Main.
+/// Reicht den nicht-Sendable completionHandler an MainActor-Tasks weiter.
 private struct CompletionHandlerBox: @unchecked Sendable {
     private let handler: () -> Void
 
@@ -324,8 +299,7 @@ private struct CompletionHandlerBox: @unchecked Sendable {
     }
 }
 
-/// Haelt die Background-Task-ID, damit Expiration-Handler und regulaeres Ende
-/// sie genau einmal beenden.
+/// Hält die Background-Task-ID, damit sie genau einmal beendet wird.
 @MainActor
 private final class BackgroundTaskToken {
     var identifier: UIBackgroundTaskIdentifier = .invalid
@@ -343,10 +317,8 @@ extension AppDelegate: MessagingDelegate {
         guard let fcmToken = fcmToken else { return }
         AppLog.app.info("Firebase FCM Token: \(fcmToken, privacy: .private)")
 
-        // Store token for later use
         try? KeychainManager.shared.saveFCMToken(fcmToken)
 
-        // Post notification so other parts of the app can use the token
         Task { @MainActor in
             NotificationCenter.default.post(
                 name: Notification.Name("FCMTokenReceived"),

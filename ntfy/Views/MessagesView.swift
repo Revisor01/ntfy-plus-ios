@@ -44,8 +44,7 @@ struct MessagesView: View {
         )
     }
 
-    /// Titel direkt aus dem Topic — nach dem Loeschen des Topics nicht mehr auf
-    /// dessen Attribute zugreifen (SwiftData-Backing-Data ist dann ungueltig).
+    /// Titel direkt aus dem Topic, nach dem Löschen sind dessen Attribute ungültig.
     private var displayName: String {
         if topic.isDeleted || topic.modelContext == nil {
             return ""
@@ -58,12 +57,10 @@ struct MessagesView: View {
         let deletedMessageIds = Set(deletedMessages.map { $0.messageId })
         var result = messages.filter { !deletedMessageIds.contains($0.messageId) }
 
-        // Star-Filter (Toolbar-Toggle)
         if showOnlyStarred {
             result = result.filter { $0.isStarred }
         }
 
-        // Suche (kombiniert mit Star-Filter)
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return result }
         return result.filter { message in
@@ -235,8 +232,7 @@ struct MessagesView: View {
             if let topicRef = message.topic {
                 topicRef.unreadCount = max(0, topicRef.unreadCount - 1)
             }
-            // Remove notification and update badge (entprellt — beim Scrollen
-            // erscheinen viele Zeilen kurz hintereinander)
+            // Entprellt, beim Scrollen erscheinen viele Zeilen kurz hintereinander.
             NotificationService.shared.removeNotification(withIdentifier: message.messageId)
             scheduleBadgeUpdate()
         }
@@ -268,8 +264,7 @@ struct MessagesView: View {
     }
 
     private func markAllAsRead() {
-        // Markiert nur die aktuell sichtbaren (gefilterten) Nachrichten —
-        // daher Zaehler und Badge danach aus der DB neu berechnen statt pauschal zu leeren.
+        // Nur die sichtbaren Nachrichten, daher Zähler danach aus der DB neu berechnen.
         for message in filteredMessages where !message.isRead {
             message.isRead = true
             NotificationService.shared.removeNotification(withIdentifier: message.messageId)
@@ -292,7 +287,6 @@ struct MessagesView: View {
         )
         modelContext.insert(deletedRecord)
 
-        // Remove notification
         NotificationService.shared.removeNotification(withIdentifier: message.messageId)
 
         // Try to delete on server if sequenceId is available (ntfy v2.16+)
@@ -326,7 +320,6 @@ struct MessagesView: View {
     }
 
     private func clearAllMessages() {
-        // Save all message IDs as deleted
         for message in messages {
             let deletedRecord = DeletedMessage(
                 messageId: message.messageId,
@@ -340,7 +333,6 @@ struct MessagesView: View {
         // Alle Messages geloescht — unreadCount auf 0
         topic.unreadCount = 0
 
-        // Delete all messages locally
         withAnimation {
             for message in messages {
                 modelContext.delete(message)
@@ -354,18 +346,14 @@ struct MessagesView: View {
     private func unsubscribeTopic() {
         badgeUpdateTask?.cancel()
 
-        // View zuerst schliessen, damit der Body nicht mehr gegen ein
-        // geloeschtes `topic` ausgewertet wird.
+        // Zuerst schließen, damit der Body nicht gegen ein gelöschtes `topic` läuft.
         dismiss()
 
-        // Gemeinsamer Aufraeum-Pfad (SSE/FCM abmelden, Benachrichtigungen,
-        // Nachrichten, DeletedMessage-Records, Topic loeschen, Badge, Widget).
-        // TopicActions.remove kopiert alle benoetigten Werte vor dem Loeschen.
+        // TopicActions.remove kopiert alle nötigen Werte vor dem Löschen.
         TopicActions.remove(topic, context: modelContext, ntfyService: ntfyService)
     }
 
-    /// Badge- und Widget-Update entprellen: viele markAsRead-Aufrufe beim Scrollen
-    /// resultieren in einem einzigen fetchCount bzw. Widget-Reload.
+    /// Entprellt Badge- und Widget-Updates beim Scrollen.
     private func scheduleBadgeUpdate() {
         badgeUpdateTask?.cancel()
         let context = modelContext

@@ -3,11 +3,9 @@ import LocalAuthentication
 
 // MARK: - Geraete-Authentifizierung (Biometrie mit Code-Fallback)
 
-/// Hilfsfunktionen rund um `.deviceOwnerAuthentication` (Face ID / Touch ID /
-/// Optic ID mit automatischem Fallback auf den Geraetecode).
+/// Hilfsfunktionen für `.deviceOwnerAuthentication` mit Fallback auf den Gerätecode.
 enum DeviceAuth {
-    /// Biometrie-Typ des Geraets (`.none`, wenn keine Biometrie eingerichtet/verfuegbar ist).
-    /// `biometryType` ist erst nach einem `canEvaluatePolicy`-Aufruf gesetzt.
+    /// Biometrie-Typ, erst nach `canEvaluatePolicy` gesetzt.
     static func biometryType() -> LABiometryType {
         let context = LAContext()
         var authError: NSError?
@@ -72,8 +70,7 @@ enum DeviceAuth {
 // MARK: - Lock Screen
 
 struct LockScreenView: View {
-    /// Automatische Authentifizierung nur bei aktiver Szene — im Zustand .inactive
-    /// (App-Start, Rueckkehr aus dem Hintergrund) schlaegt der Dialog sonst fehl.
+    /// Nur bei aktiver Szene, im Zustand .inactive scheitert der Dialog.
     let isSceneActive: Bool
     let onUnlock: () -> Void
 
@@ -82,8 +79,7 @@ struct LockScreenView: View {
     /// true, wenn das Geraet gar keinen Code hat — dann gibt es keinen Entsperr-Weg
     @State private var passcodeNotSet = false
     @State private var biometry: LABiometryType = .none
-    /// Automatisch nur einmal pro Sperre authentifizieren — die Rueckkehr aus dem
-    /// Face-ID-/Code-Dialog (inactive → active) soll keinen neuen Dialog oeffnen.
+    /// Nur einmal pro Sperre, die Rückkehr aus dem Dialog soll keinen neuen öffnen.
     @State private var hasAutoAuthenticated = false
 
     init(isSceneActive: Bool = true, onUnlock: @escaping () -> Void) {
@@ -117,8 +113,7 @@ struct LockScreenView: View {
                 }
 
                 if passcodeNotSet {
-                    // Ohne Geraetecode kann iOS niemanden authentifizieren — statt
-                    // dauerhafter Aussperrung die Sperre bewusst deaktivieren lassen.
+                    // Ohne Gerätecode kann iOS niemanden authentifizieren, daher Sperre abschaltbar statt Aussperrung.
                     Button {
                         AppSettings.biometricLockEnabled = false
                         onUnlock()
@@ -163,8 +158,7 @@ struct LockScreenView: View {
         let context = LAContext()
         var authError: NSError?
 
-        // .deviceOwnerAuthentication = Biometrie mit automatischem Code-Fallback (BIO-03),
-        // funktioniert auch auf Geraeten ganz ohne Biometrie
+        // Biometrie mit Code-Fallback, geht auch ohne Biometrie.
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &authError) else {
             errorMessage = DeviceAuth.unavailableMessage(for: authError)
             if let authError, authError.domain == LAError.errorDomain,

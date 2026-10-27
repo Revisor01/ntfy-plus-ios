@@ -132,7 +132,7 @@ final class Topic {
     @Attribute var lastMessagePriority: Int = 3
     @Attribute var lastMessageIconURL: String?
 
-    // Phase 5: Notification Customization
+    // Mitteilungs-Anpassung
     @Attribute var customSoundName: String? = nil
     @Attribute var defaultPriority: Int = 3
 
@@ -174,16 +174,12 @@ final class Topic {
 
 // MARK: - Topic Sound Sync (App Group)
 
-/// Schreibt das topic→sound Mapping in App Group UserDefaults,
-/// damit die NotificationServiceExtension Sound-Namen ohne SwiftData-Zugriff lesen kann.
+/// Schreibt das Topic-Sound-Mapping in die App Group, damit die NSE es ohne SwiftData liest.
 struct TopicSoundSync {
     static let suiteName = "group.de.godsapp.ntfy"
     static let soundDictKey = "topicSoundNames"
 
-    /// Aktualisiert den Sound-Eintrag für einen einzelnen Topic.
-    /// - Parameters:
-    ///   - topicName: Der Topic-Name (z.B. "home-assistant")
-    ///   - soundName: Der UNNotificationSound-Name (nil = Standard-Sound entfernen)
+    /// Setzt den Sound eines Topics; nil entfernt den Eintrag.
     static func update(topicName: String, soundName: String?) {
         guard let defaults = UserDefaults(suiteName: suiteName) else { return }
         var dict = defaults.dictionary(forKey: soundDictKey) as? [String: String] ?? [:]
@@ -279,11 +275,9 @@ final class StoredMessage {
     var isRead: Bool
     var isStarred: Bool = false
     var receivedAt: Date
-    /// Markdown-Kennzeichen vom Server (`content_type: text/markdown`).
-    /// nil = vor diesem Feld gespeichert (wird weiterhin als Markdown dargestellt).
+    /// Markdown-Kennzeichen vom Server; nil heißt ältere Nachricht, weiter als Markdown dargestellt.
     var isMarkdown: Bool? = nil
 
-    // New: Attachment and Actions
     var attachmentData: Data?
     var actionsData: Data?
 
@@ -305,13 +299,11 @@ final class StoredMessage {
         self.isMarkdown = ntfyMessage.isMarkdown
         self.topic = topic
 
-        // Encode attachment
         if let attachment = ntfyMessage.attachment {
             let storedAttachment = StoredAttachment(from: attachment)
             self.attachmentData = try? JSONEncoder().encode(storedAttachment)
         }
 
-        // Encode actions
         if let actions = ntfyMessage.actions, !actions.isEmpty {
             let storedActions = actions.map { StoredAction(from: $0) }
             self.actionsData = try? JSONEncoder().encode(storedActions)
@@ -330,13 +322,11 @@ final class StoredMessage {
         tags?.compactMap { EmojiMap.emoji(for: $0) } ?? []
     }
 
-    // Decoded attachment
     var attachment: StoredAttachment? {
         guard let data = attachmentData else { return nil }
         return try? JSONDecoder().decode(StoredAttachment.self, from: data)
     }
 
-    // Decoded actions
     var actions: [StoredAction]? {
         guard let data = actionsData else { return nil }
         return try? JSONDecoder().decode([StoredAction].self, from: data)

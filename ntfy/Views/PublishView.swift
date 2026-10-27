@@ -121,7 +121,6 @@ struct PublishView: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Topic selection
                 Section {
                     if !topics.isEmpty && !useCustomTopic {
                         Picker("Topic", selection: $topic) {
@@ -147,7 +146,6 @@ struct PublishView: View {
                     }
                 }
 
-                // Message
                 Section {
                     TextField("Titel (optional)", text: $title)
 
@@ -162,7 +160,6 @@ struct PublishView: View {
                     }
                 }
 
-                // Priority
                 Section {
                     Picker("Priorität", selection: $priority) {
                         ForEach(Priority.allCases, id: \.self) { p in
@@ -177,13 +174,10 @@ struct PublishView: View {
                     Text("Priorität")
                 }
 
-                // Datei-Anhang
                 attachmentSection
 
-                // Zeitversetzte Zustellung
                 scheduleSection
 
-                // Advanced options
                 Section {
                     DisclosureGroup("Erweiterte Optionen", isExpanded: $showAdvanced) {
                         TextField("Tags (kommagetrennt)", text: $tags)
@@ -223,7 +217,6 @@ struct PublishView: View {
                     }
                 }
 
-                // Error message
                 if let error = error {
                     Section {
                         Label(error, systemImage: AppIcons.error)
@@ -402,8 +395,7 @@ struct PublishView: View {
         }
     }
 
-    /// Dateiname aus Zeitstempel + Endung; HEIC/HEIF wird zu JPEG umgewandelt,
-    /// da viele Empfaenger (Web-App, aeltere Android-Geraete) HEIC nicht anzeigen.
+    /// HEIC wird zu JPEG, weil viele Empfänger HEIC nicht anzeigen.
     private static func preparePhoto(data: Data, contentType: UTType?) -> (data: Data, filename: String) {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyyMMdd-HHmmss"
@@ -541,8 +533,7 @@ struct PublishView: View {
         let publishPriority = priority
         let attachment = localAttachment
 
-        // Zeitversetzt: Datumsauswahl als RFC-3339-Zeitstempel, sonst Freitext (30min, 9am …).
-        // Die Geraete-Zeitzone (IANA) erlaubt dem Server, Angaben wie "9am" korrekt aufzuloesen.
+        // Mit Geräte-Zeitzone, damit der Server Angaben wie "9am" richtig auflöst.
         let publishDelay: String?
         if useScheduledDate {
             publishDelay = Self.rfc3339String(from: scheduledDate)
