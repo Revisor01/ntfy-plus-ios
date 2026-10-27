@@ -42,8 +42,8 @@ dafür, mit eigenem Server oder ntfy.sh.
 
 ## Installation
 
-Die App ist noch nicht im App Store. Die aktuelle Fassung **2.2 (Build 8)** gibt
-es über TestFlight; Zugang auf Anfrage über die Kontaktadresse unten.
+Die App ist noch nicht im App Store. Die aktuelle Fassung gibt es über
+TestFlight; Zugang auf Anfrage über die Kontaktadresse unten.
 
 Zum Loslegen braucht es iOS 27 oder neuer und einen ntfy-Server — ntfy.sh ist
 voreingestellt, ein eigener funktioniert genauso.
@@ -81,12 +81,6 @@ ntfy-plus-ios
 │                                   anhänge, bevor die Mitteilung erscheint
 └── NtfyWidget/                   — Widget für den Home-Bildschirm
 ```
-
-**Worauf es beim Bauen ankommt:**
-- **Zugangsdaten gehören in den Schlüsselbund**, nie in die Einstellungen.
-- **Keine Zugangsdaten an fremde Hosts** — angemeldet wird nur beim eigenen Server.
-- **Verhalten wie upstream ntfy**, wo das Protokoll es vorgibt (Markdown, Aktionen,
-  Anhänge).
 
 ## Mitmachen
 
