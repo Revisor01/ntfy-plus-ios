@@ -23,7 +23,7 @@ und dieses Projekt folgt [Semantic Versioning 2.0.0](https://semver.org/lang/de/
 
 iOS 27 als Mindestversion, neue Sende- und Push-Funktionen. Build 8.
 
-### Added
+### Hinzugefügt
 
 - **Anhänge senden**: Fotos (PhotosPicker) und Dateien bis 15 MB direkt aus der App
   hochladen (`PUT /<topic>`, Nachricht/Titel/Priorität/Tags als Parameter)
@@ -36,7 +36,7 @@ iOS 27 als Mindestversion, neue Sende- und Push-Funktionen. Build 8.
 - Tap auf eine Mitteilung beim Kaltstart öffnet das Topic (nach dem Entsperren)
 - CodeQL-Analyse läuft wieder (neuer Workflow-Pfad), Dependabot auch für Swift-Pakete
 
-### Changed
+### Geändert
 
 - **Mindestversion iOS 27.0** für App, Notification Service Extension und Widget
   (vorher iOS 26 bzw. 17); alle Targets in Swift 6; Build mit Xcode 27
@@ -50,7 +50,7 @@ iOS 27 als Mindestversion, neue Sende- und Push-Funktionen. Build 8.
 - iPad: App-Sperre und Sichtschutz gelten für alle Fenster; Entsperren gilt app-weit
 - `Package.resolved` ist eingecheckt (reproduzierbare Builds)
 
-### Fixed
+### Behoben
 
 - Abgelaufene Anhänge werden als „Anhang abgelaufen" angezeigt statt fehlzuschlagen
 - Gekürzte Poll-Antworten des Servers (`X-Messages-Truncated`) werden protokolliert
@@ -65,7 +65,7 @@ iOS 27 als Mindestversion, neue Sende- und Push-Funktionen. Build 8.
 Abgleich mit ntfy-Server v2.28–v2.34 und der offiziellen iOS-App 1.8.0, plus Behebung
 der Befunde aus einem vollständigen Code-Audit. Build 7.
 
-### Added
+### Hinzugefügt
 
 - **Geschützte Topics per Push**: Die Notification Service Extension löst `poll_request`-Pushes
   auf und lädt den echten Nachrichteninhalt nach (`GET /<topic>/json?poll=1&id=…`, mit
@@ -82,7 +82,7 @@ der Befunde aus einem vollständigen Code-Audit. Build 7.
 - Lokale Server im LAN per `http://` (`NSAllowsLocalNetworking`)
 - Eigener CI-Build-Workflow für Pull Requests, Dependabot für GitHub Actions
 
-### Changed
+### Geändert
 
 - Senden über die ntfy-JSON-API statt HTTP-Header — Umlaute und Emoji in Titel und Tags
   kommen korrekt an; Fehlermeldungen des Servers werden angezeigt; Limits für Titel (1 KB)
@@ -99,7 +99,7 @@ der Befunde aus einem vollständigen Code-Audit. Build 7.
 - Bedienungshilfen: Beschriftungen für Symbol-Buttons, Farb- und Icon-Auswahl per VoiceOver bedienbar
 - Firebase iOS SDK 12.7 → 13.1.1 (benötigt Xcode 26.2+), `actions/checkout` v4 → v7
 
-### Fixed
+### Behoben
 
 - **Datenverlust**: Ein `message_clear`-Event löschte die gesamte lokale Historie des Topics
 - `message_delete` vom Server wurde nie angewendet (falsche ID); Updates erzeugten Duplikate
@@ -131,12 +131,12 @@ der Befunde aus einem vollständigen Code-Audit. Build 7.
   Sonderzeichen, Hash-Overflow (`Int.min`)
 - Wirkungslose Custom-Sound-Auswahl entfernt
 
-### Removed
+### Entfernt
 
 - Ungenutzte Background-Modes `fetch`/`processing`, `.provisional`-Autorisierung und toter
   Code für lokale Benachrichtigungen (inkl. `.defaultCritical` ohne Entitlement)
 
-### Security
+### Sicherheit
 
 - Deep Links (`ntfy://topic/…`) hoben die Face-ID-Sperre auf — das Ziel wird jetzt erst nach
   dem Entsperren geöffnet
@@ -158,7 +158,7 @@ der Befunde aus einem vollständigen Code-Audit. Build 7.
 
 Erste über TestFlight ausgelieferte Version (Build 6).
 
-### Added
+### Hinzugefügt
 
 - **Home-Screen-Widget** (`NtfyWidget`) mit Deep-Link-Unterstützung über das URL-Schema `ntfy://`
 - **iPad-Layout**: `NavigationSplitView` mit Zwei-Spalten-Darstellung
@@ -177,7 +177,7 @@ Erste über TestFlight ausgelieferte Version (Build 6).
 - Aufbewahrungsdauer für Nachrichten und Cleanup gelöschter Nachrichten
 - Haptisches Feedback für Swipe-Actions und Stern-Umschalter
 
-### Changed
+### Geändert
 
 - SwiftData-Schema mehrfach erweitert (V1 → V4) und anschließend auf ein einzelnes
   `NtfySchema` ohne Migrationsplan vereinfacht
@@ -186,7 +186,7 @@ Erste über TestFlight ausgelieferte Version (Build 6).
 - URL-Normalisierung zentralisiert, Default-Server auf `push.godsapp.de` gesetzt
 - APNs auf Production umgestellt für die TestFlight-Auslieferung
 
-### Fixed
+### Behoben
 
 - Crash bei identischen Model-Referenzen im Migrationsplan
 - `ModelContainer`-`fatalError` durch eine Fehler-UI ersetzt, force-unwrapped URL abgesichert
@@ -196,11 +196,11 @@ Erste über TestFlight ausgelieferte Version (Build 6).
 - Widget-Daten werden einmal nach vollständigem Refresh geschrieben statt einmal pro Topic
 - Sound-Vorschau und Notification-Sound spielen wieder korrekt ab
 
-### Removed
+### Entfernt
 
 - Tote Delegate-Extension entfernt
 
-### Security
+### Sicherheit
 
 - Bestätigungsdialog vor dem Ausführen von HTTP-Actions
 - FCM-Token in die Keychain migriert
@@ -216,7 +216,7 @@ Erste über TestFlight ausgelieferte Version (Build 6).
 
 Erste Version.
 
-### Added
+### Hinzugefügt
 
 - Abonnieren von Topics auf ntfy.sh oder einem selbst gehosteten ntfy-Server
 - Echtzeit-Benachrichtigungen über SSE sowie Push über Firebase Cloud Messaging
@@ -225,8 +225,8 @@ Erste Version.
 - Anzeige von App-Icons aus Nachrichten, Prioritäts-Badges, Dark Mode
 - Notification Service Extension für Badge-Zählung und Aufbereitung eingehender Pushes
 
-[Unreleased]: https://github.com/Revisor01/ntfy-plus-ios/compare/v2.2.0...HEAD
-[2.2.0]: https://github.com/Revisor01/ntfy-plus-ios/compare/v2.1.0...v2.2.0
-[2.1.0]: https://github.com/Revisor01/ntfy-plus-ios/compare/v2.0.0...v2.1.0
+[Unreleased]: https://github.com/Revisor01/ntfy-plus-ios/compare/2.2.0...HEAD
+[2.2.0]: https://github.com/Revisor01/ntfy-plus-ios/compare/2.1.0...2.2.0
+[2.1.0]: https://github.com/Revisor01/ntfy-plus-ios/compare/v2.0.0...2.1.0
 [2.0.0]: https://github.com/Revisor01/ntfy-plus-ios/compare/v1.0...v2.0.0
 [1.0.0]: https://github.com/Revisor01/ntfy-plus-ios/releases/tag/v1.0
