@@ -17,6 +17,8 @@ struct WidgetMessage: Identifiable, Codable {
     let message: String
     let time: Int
     let priority: Int
+    var topicSymbol: String? = nil
+    var topicColorHex: String? = nil
 
     var id: String { messageId }
 
@@ -184,7 +186,13 @@ struct MessageRowView: View {
                 .frame(width: 3, height: 28)
 
             VStack(alignment: .leading, spacing: 1) {
-                HStack {
+                HStack(spacing: 4) {
+                    if let symbol = message.topicSymbol {
+                        Image(systemName: symbol)
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(message.topicColorHex.map { Color(hex: $0) } ?? .secondary)
+                            .accessibilityHidden(true)
+                    }
                     Text(message.topic)
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.secondary)
@@ -278,6 +286,7 @@ struct NtfyWidgetEntryView: View {
     WidgetEntry(date: Date(), messages: [
         WidgetMessage(messageId: "1", topic: "ha-alerts", title: "Bewegungsmelder", message: "Keller", time: Int(Date().timeIntervalSince1970), priority: 4),
         WidgetMessage(messageId: "2", topic: "uptime", title: "Service down", message: "push.godsapp.de", time: Int(Date().timeIntervalSince1970) - 300, priority: 5),
-        WidgetMessage(messageId: "3", topic: "plex", title: "Wiedergabe", message: "Breaking Bad S01E01", time: Int(Date().timeIntervalSince1970) - 1800, priority: 3)
+        WidgetMessage(messageId: "3", topic: "plex", title: "Wiedergabe", message: "Breaking Bad S01E01", time: Int(Date().timeIntervalSince1970) - 1800, priority: 3,
+                      topicSymbol: "play.rectangle.fill", topicColorHex: "#E5A00D")
     ], unreadCount: 3)
 }

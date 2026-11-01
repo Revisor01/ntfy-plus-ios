@@ -21,6 +21,7 @@ struct AddTopicView: View {
 
     @State private var selectedIcon: String? = nil
     @State private var selectedColor = Color.blue
+    @State private var colorIsAutomatic = true
     @State private var customLetter = ""
     @State private var useIcon = false
 
@@ -28,6 +29,11 @@ struct AddTopicView: View {
     @State private var error: String?
     @State private var showingIconPicker = false
     @State private var showingColorPicker = false
+
+    /// Ohne eigene Wahl die zum Namen passende Farbe, wie sie die Topic-Liste zeigt.
+    private var effectiveColor: Color {
+        colorIsAutomatic ? TopicAvatar.color(topicName: topicName.trimmed(), colorHex: nil) : selectedColor
+    }
 
     private var defaultServer: Server? {
         servers.first { $0.isDefault }
@@ -170,7 +176,7 @@ struct AddTopicView: View {
                                 Spacer()
                                 Image(systemName: selectedIcon ?? "bell.fill")
                                     .font(.title2)
-                                    .foregroundStyle(selectedColor)
+                                    .foregroundStyle(effectiveColor)
                             }
                         }
                         .buttonStyle(.plain)
@@ -178,7 +184,7 @@ struct AddTopicView: View {
                         HStack {
                             Text("Buchstabe")
                             Spacer()
-                            TextField(String(topicName.prefix(1)).uppercased().isEmpty ? "A" : String(topicName.prefix(1)).uppercased(), text: $customLetter)
+                            TextField("automatisch", text: $customLetter)
                                 .multilineTextAlignment(.trailing)
                                 .textInputAutocapitalization(.characters)
                                 .frame(width: 60)
@@ -197,7 +203,7 @@ struct AddTopicView: View {
                             Text("Farbe")
                             Spacer()
                             Circle()
-                                .fill(selectedColor)
+                                .fill(effectiveColor)
                                 .frame(width: 24, height: 24)
                         }
                     }
@@ -205,7 +211,7 @@ struct AddTopicView: View {
                 } header: {
                     Text("Darstellung")
                 } footer: {
-                    Text("Du kannst einen Buchstaben (1-2 Zeichen) oder ein Icon wählen.")
+                    Text("Du kannst einen Buchstaben (1-2 Zeichen) oder ein Icon wählen. Ohne Auswahl zeigt die App ein zum Topic-Namen passendes Symbol, sonst den Anfangsbuchstaben.")
                 }
 
                 if let error = error {
@@ -239,7 +245,13 @@ struct AddTopicView: View {
                     .presentationDetents([.medium, .large])
             }
             .sheet(isPresented: $showingColorPicker) {
-                TopicColorPicker(selectedColor: $selectedColor)
+                TopicColorPicker(selectedColor: Binding(
+                    get: { effectiveColor },
+                    set: {
+                        selectedColor = $0
+                        colorIsAutomatic = false
+                    }
+                ))
                     .presentationDetents([.medium])
             }
             .onAppear {
@@ -260,24 +272,13 @@ struct AddTopicView: View {
 
     @ViewBuilder
     private var topicPreview: some View {
-        let displayLetter = customLetter.isEmpty ? String(topicName.prefix(1)).uppercased() : customLetter
-        let letterToShow = displayLetter.isEmpty ? "?" : displayLetter
-
-        ZStack {
-            RoundedRectangle(cornerRadius: 16)
-                .fill(selectedColor.gradient)
-                .frame(width: 64, height: 64)
-
-            if useIcon {
-                Image(systemName: selectedIcon ?? "bell.fill")
-                    .font(.system(size: 28))
-                    .foregroundStyle(.white)
-            } else {
-                Text(letterToShow)
-                    .font(.system(size: 28, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-        }
+        TopicAvatar(
+            topicName: topicName.trimmed(),
+            iconName: useIcon ? (selectedIcon ?? "bell.fill") : nil,
+            customLetter: useIcon ? nil : customLetter,
+            colorHex: colorIsAutomatic ? nil : selectedColor.toHex(),
+            size: 64
+        )
     }
 
     private func subscribe() {
@@ -320,7 +321,7 @@ struct AddTopicView: View {
                     serverURL: serverURL,
                     useAuth: useAuth,
                     iconName: useIcon ? (selectedIcon ?? "bell.fill") : nil,
-                    colorHex: selectedColor.toHex()
+                    colorHex: colorIsAutomatic ? nil : selectedColor.toHex()
                 )
                 topic.customLetter = useIcon ? nil : (customLetter.isEmpty ? nil : customLetter)
 
