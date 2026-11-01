@@ -125,7 +125,7 @@ struct PublishView: View {
                     if !topics.isEmpty && !useCustomTopic {
                         Picker("Topic", selection: $topic) {
                             ForEach(topics) { t in
-                                Text(t.name).tag(t as Topic?)
+                                topicLabel(t).tag(t as Topic?)
                             }
                         }
                     }
@@ -349,6 +349,16 @@ struct PublishView: View {
 
     private static var formattedUploadLimit: String {
         ByteCountFormatter.string(fromByteCount: Int64(NtfyUploadLimits.maxAttachmentBytes), countStyle: .file)
+    }
+
+    @ViewBuilder
+    private func topicLabel(_ topic: Topic) -> some View {
+        switch TopicSymbols.glyph(topicName: topic.name, iconName: topic.iconName, customLetter: topic.customLetter) {
+        case .symbol(let symbol):
+            Label(topic.name, systemImage: symbol)
+        case .letter:
+            Text(topic.name)
+        }
     }
 
     private func removeAttachment() {

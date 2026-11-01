@@ -5,7 +5,12 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 Das Format basiert auf [Keep a Changelog 1.1.0](https://keepachangelog.com/de/1.1.0/),
 und dieses Projekt folgt [Semantic Versioning 2.0.0](https://semver.org/lang/de/).
 
-## [Unreleased]
+## [Unreleased] - 2.3.0
+
+### Hinzugefügt
+- Jedes Topic zeigt ein passendes Symbol in eigener Farbe, etwa für Plex, Sonarr, Docker, Uptime-Alarme oder GitHub; kritische Topics wie `uptime-critical` erscheinen rot mit Warnzeichen.
+- Die Symbole erscheinen auch im Widget und bei der Topic-Auswahl beim Senden.
+- Icon und Farbe lassen sich pro Topic auf „Automatisch“ zurücksetzen; ein selbst gewähltes Icon, ein eigener Buchstabe oder eine eigene Farbe haben weiter Vorrang.
 
 ### Geändert
 - Neue Lizenz: GNU AGPL v3.0 statt GPL-3.0: Die Pflicht, Änderungen offenzulegen, gilt jetzt auch für den Betrieb als Webdienst.

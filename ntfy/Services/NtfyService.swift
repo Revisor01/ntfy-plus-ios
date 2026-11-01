@@ -1397,7 +1397,7 @@ final class NtfyService {
 
         let entries: [[String: Any]] = messages.compactMap { msg in
             guard let topic = msg.topic else { return nil }
-            return [
+            var entry: [String: Any] = [
                 "messageId": msg.messageId,
                 "topic": topic.name,
                 "title": msg.title ?? "",
@@ -1405,6 +1405,15 @@ final class NtfyService {
                 "time": msg.time,
                 "priority": msg.priority
             ]
+            if case .symbol(let symbol) = TopicSymbols.glyph(
+                topicName: topic.name, iconName: topic.iconName, customLetter: topic.customLetter
+            ) {
+                entry["topicSymbol"] = symbol
+            }
+            if let colorHex = TopicSymbols.colorHex(topicName: topic.name, colorHex: topic.colorHex) {
+                entry["topicColorHex"] = colorHex
+            }
+            return entry
         }
 
         // Tatsaechliche Anzahl ungelesener Nachrichten (nicht auf die 10 Eintraege begrenzt)

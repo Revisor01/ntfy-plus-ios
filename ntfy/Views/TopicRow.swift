@@ -61,53 +61,65 @@ struct TopicRow: View {
         .padding(.vertical, AppSpacing.xxs)
     }
 
-    private var generatedColor: Color {
-        if let hex = topic.colorHex {
-            return Color(hex: hex)
-        }
-        // Generate consistent color from topic name
-        let hash = topic.name.utf8.reduce(0) { $0 &+ Int($1) }
-        let colors: [Color] = [
-            .red, .orange, .yellow, .green, .mint, .teal,
-            .cyan, .blue, .indigo, .purple, .pink, .brown
-        ]
-        let index = Int(hash.magnitude % UInt(colors.count))
-        return colors[index]
-    }
-
     @ViewBuilder
     private var topicIcon: some View {
-        // Priority 1: Show icon from latest message (e.g. Sonarr logo) if enabled
         if topic.shouldUseMessageIcon, let iconURL = topic.lastMessageIconURL {
             CachedAsyncImage(url: iconURL, placeholder: "app.badge")
                 .frame(width: 44, height: 44)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
+        } else {
+            TopicAvatar(
+                topicName: topic.name,
+                iconName: topic.iconName,
+                customLetter: topic.customLetter,
+                colorHex: topic.colorHex
+            )
         }
-        // Priority 2: Custom icon set by user
-        else if let iconName = topic.iconName {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(generatedColor.gradient)
-                    .frame(width: 44, height: 44)
+    }
+}
 
-                Image(systemName: iconName)
-                    .font(.title3)
+/// Kachel mit Symbol oder Buchstabe eines Topics, wie in der Topic-Liste.
+struct TopicAvatar: View {
+    let topicName: String
+    let iconName: String?
+    let customLetter: String?
+    let colorHex: String?
+    var size: CGFloat = 44
+
+    static func fallbackColor(for topicName: String) -> Color {
+        let hash = topicName.utf8.reduce(0) { $0 &+ Int($1) }
+        let colors: [Color] = [
+            .red, .orange, .yellow, .green, .mint, .teal,
+            .cyan, .blue, .indigo, .purple, .pink, .brown
+        ]
+        return colors[Int(hash.magnitude % UInt(colors.count))]
+    }
+
+    static func color(topicName: String, colorHex: String?) -> Color {
+        if let hex = TopicSymbols.colorHex(topicName: topicName, colorHex: colorHex) {
+            return Color(hex: hex)
+        }
+        return fallbackColor(for: topicName)
+    }
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: size * 0.23)
+                .fill(Self.color(topicName: topicName, colorHex: colorHex).gradient)
+                .frame(width: size, height: size)
+
+            switch TopicSymbols.glyph(topicName: topicName, iconName: iconName, customLetter: customLetter) {
+            case .symbol(let symbol):
+                Image(systemName: symbol)
+                    .font(.system(size: size * 0.45))
+                    .foregroundStyle(.white)
+            case .letter(let letter):
+                Text(letter)
+                    .font(.system(size: size * 0.5, weight: .semibold))
                     .foregroundStyle(.white)
             }
         }
-        // Priority 3: Letter avatar with gradient
-        else {
-            ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(generatedColor.gradient)
-                    .frame(width: 44, height: 44)
-
-                Text(topic.displayLetter)
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-            }
-        }
+        .accessibilityHidden(true)
     }
 }
 

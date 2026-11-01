@@ -6,6 +6,7 @@ struct EditTopicView: View {
     @Bindable var topic: Topic
 
     @State private var selectedColor: Color
+    @State private var colorIsAutomatic: Bool
     @State private var customLetter: String
     @State private var selectedIcon: String?
     @State private var useMessageIcon: Bool
@@ -39,7 +40,8 @@ struct EditTopicView: View {
 
     init(topic: Topic) {
         self.topic = topic
-        _selectedColor = State(initialValue: topic.colorHex != nil ? Color(hex: topic.colorHex!) : .blue)
+        _selectedColor = State(initialValue: TopicAvatar.color(topicName: topic.name, colorHex: topic.colorHex))
+        _colorIsAutomatic = State(initialValue: topic.colorHex == nil)
         _customLetter = State(initialValue: topic.customLetter ?? "")
         _selectedIcon = State(initialValue: topic.iconName)
         _useMessageIcon = State(initialValue: topic.shouldUseMessageIcon)
@@ -88,14 +90,18 @@ struct EditTopicView: View {
             Text("Wenn aktiviert, wird das Icon der letzten Nachricht (z.B. Sonarr-Logo) angezeigt, falls vorhanden.")
         }
 
-        Section("Buchstabe") {
-            TextField("Buchstabe (leer = erster Buchstabe)", text: $customLetter)
+        Section {
+            TextField("Buchstabe (leer = automatisch)", text: $customLetter)
                 .textInputAutocapitalization(.characters)
                 .onChange(of: customLetter) { _, newValue in
                     if newValue.count > 2 {
                         customLetter = String(newValue.prefix(2))
                     }
                 }
+        } header: {
+            Text("Buchstabe")
+        } footer: {
+            Text("Ohne eigenes Icon und Buchstaben zeigt die App ein zum Topic-Namen passendes Symbol, sonst den Anfangsbuchstaben.")
         }
     }
 
@@ -110,11 +116,29 @@ struct EditTopicView: View {
     private var colorSection: some View {
         Section("Farbe") {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
+                Button {
+                    colorIsAutomatic = true
+                    selectedColor = TopicAvatar.color(topicName: topic.name, colorHex: nil)
+                } label: {
+                    Circle()
+                        .fill(TopicAvatar.color(topicName: topic.name, colorHex: nil).gradient)
+                        .frame(width: 44, height: 44)
+                        .overlay {
+                            Image(systemName: colorIsAutomatic ? "checkmark" : "wand.and.stars")
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Automatisch")
+                .accessibilityAddTraits(colorIsAutomatic ? .isSelected : [])
+
                 ForEach(Array(availableColors.enumerated()), id: \.offset) { item in
                     let color = item.element
                     let isSelected = colorMatches(color)
                     Button {
                         selectedColor = color
+                        colorIsAutomatic = false
                     } label: {
                         Circle()
                             .fill(color.gradient)
@@ -139,7 +163,7 @@ struct EditTopicView: View {
 
     @ViewBuilder
     private var iconSection: some View {
-        Section("Icon (optional)") {
+        Section("Icon") {
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 6), spacing: 12) {
                 Button {
                     selectedIcon = nil
@@ -149,7 +173,7 @@ struct EditTopicView: View {
                             .fill(Color.secondary.opacity(0.2))
                             .frame(width: 44, height: 44)
 
-                        Image(systemName: "xmark")
+                        Image(systemName: "wand.and.stars")
                             .foregroundStyle(.secondary)
                     }
                     .overlay {
@@ -160,7 +184,7 @@ struct EditTopicView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Kein Icon")
+                .accessibilityLabel("Automatisch")
                 .accessibilityAddTraits(selectedIcon == nil ? .isSelected : [])
 
                 ForEach(availableIcons, id: \.self) { icon in
@@ -211,21 +235,13 @@ struct EditTopicView: View {
     @ViewBuilder
     private var topicPreview: some View {
         VStack(spacing: 8) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(selectedColor.gradient)
-                    .frame(width: 80, height: 80)
-
-                if let icon = selectedIcon {
-                    Image(systemName: icon)
-                        .font(.system(size: 36))
-                        .foregroundStyle(.white)
-                } else {
-                    Text(customLetter.isEmpty ? String(topic.name.prefix(1)).uppercased() : customLetter)
-                        .font(.system(size: 36, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-            }
+            TopicAvatar(
+                topicName: topic.name,
+                iconName: selectedIcon,
+                customLetter: customLetter,
+                colorHex: colorIsAutomatic ? nil : selectedColor.toHex(),
+                size: 80
+            )
 
             Text(topic.name)
                 .font(.headline)
@@ -234,13 +250,14 @@ struct EditTopicView: View {
     }
 
     private func colorMatches(_ color: Color) -> Bool {
+        guard !colorIsAutomatic else { return false }
         let colorHex = color.toHex()
         let selectedHex = selectedColor.toHex()
         return colorHex == selectedHex
     }
 
     private func saveChanges() {
-        topic.colorHex = selectedColor.toHex()
+        topic.colorHex = colorIsAutomatic ? nil : selectedColor.toHex()
         topic.customLetter = customLetter.isEmpty ? nil : customLetter
         topic.iconName = selectedIcon
         topic.useMessageIcon = useMessageIcon
